@@ -1,0 +1,51 @@
+# SpinLab Analysis Environment Requirements
+
+# Core SpinLab (install via git or PyPI)
+# git+https://github.com/Akram-Ibrahim/SpinLab.git
+
+# Scientific Computing Core
+numpy>=1.20.0
+scipy>=1.7.0
+matplotlib>=3.3.0
+pandas>=1.3.0
+h5py>=3.1.0
+
+# Atomic Simulation Environment
+ase>=3.21.0
+
+# Progress bars and utilities
+tqdm>=4.60.0
+
+# High Performance Computing
+numba>=0.56.0
+
+# Jupyter Analysis Environment
+jupyter>=1.0.0
+notebook>=6.0.0
+ipywidgets>=7.6.0
+ipykernel>=6.0.0
+
+# Advanced Plotting and Visualization
+plotly>=5.0.0
+seaborn>=0.11.0
+bokeh>=2.0.0
+
+# Statistical Analysis
+scikit-learn>=1.0.0
+statsmodels>=0.12.0
+
+# Data Export and Format Support
+openpyxl>=3.0.0
+xlsxwriter>=3.0.0
+
+# Image and Animation
+imageio>=2.9.0
+ffmpeg-python>=0.2.0
+
+# Memory profiling and performance
+memory-profiler>=0.60.0
+line-profiler>=3.5.0
+
+# Optional: Machine Learning (for advanced analysis)
+# tensorflow>=2.8.0
+# torch>=1.11.0
