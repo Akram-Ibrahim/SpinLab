@@ -19,7 +19,7 @@ A comprehensive Python package for spin simulations and magnetic analysis, suppo
 ### From PyPI (Recommended)
 
 ```bash
-pip install spinlab-sim
+pip install spinlab
 ```
 
 ### From GitHub

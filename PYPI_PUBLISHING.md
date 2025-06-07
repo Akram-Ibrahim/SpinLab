@@ -37,7 +37,7 @@ This creates:
 twine upload --repository testpypi dist/*
 
 # Test install from TestPyPI
-pip install --index-url https://test.pypi.org/simple/ spinlab-sim
+pip install --index-url https://test.pypi.org/simple/ spinlab
 ```
 
 ### 4. Upload to Real PyPI
@@ -56,7 +56,7 @@ pip install spinlab-sim
 
 Users can install with:
 ```bash
-pip install spinlab-sim
+pip install spinlab
 ```
 
 ## Version Updates
@@ -69,9 +69,9 @@ To release new versions:
 
 ## Package Name Note
 
-- Package name on PyPI: `spinlab-sim`
+- Package name on PyPI: `spinlab`
 - Import name in Python: `spinlab`
-- This avoids conflicts with existing packages
+- Clean, consistent naming throughout
 
 ## Authentication
 

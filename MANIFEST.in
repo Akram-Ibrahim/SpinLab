@@ -1,7 +1,8 @@
 include README.md
 include LICENSE
 include DEVELOPMENT_SUMMARY.md
-recursive-include examples *.py
+include PYPI_PUBLISHING.md
+recursive-include examples *.py *.ipynb
 recursive-include spinlab *.py
 global-exclude __pycache__
 global-exclude *.py[co]
