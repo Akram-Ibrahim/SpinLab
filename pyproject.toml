@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spinlab"
+version = "0.1.0"
+description = "Comprehensive spin simulation and analysis package for Monte Carlo, LLG dynamics, and thermodynamics"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Akram Ibrahim", email = "akram.ibrahim@example.com"}
+]
+maintainers = [
+    {name = "Akram Ibrahim", email = "akram.ibrahim@example.com"}
+]
+keywords = ["spin", "monte carlo", "llg", "magnetism", "thermodynamics", "physics"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.3.0",
+    "ase>=3.21.0",
+    "pandas>=1.3.0",
+    "tqdm>=4.60.0",
+    "h5py>=3.1.0",
+    "numba>=0.56.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.12",
+    "black>=21.0",
+    "flake8>=3.9",
+    "mypy>=0.910",
+    "pre-commit>=2.15",
+]
+docs = [
+    "sphinx>=4.0",
+    "sphinx-rtd-theme>=1.0",
+    "myst-parser>=0.15",
+]
+jupyter = [
+    "jupyter>=1.0",
+    "ipywidgets>=7.6",
+    "plotly>=5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/akramibrahim/SpinLab"
+Documentation = "https://spinlab.readthedocs.io"
+Repository = "https://github.com/akramibrahim/SpinLab"
+"Bug Tracker" = "https://github.com/akramibrahim/SpinLab/issues"
+
+[project.scripts]
+spinlab = "spinlab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["spinlab*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=spinlab --cov-report=term-missing"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
