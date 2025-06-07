@@ -16,6 +16,18 @@ A comprehensive Python package for spin simulations and magnetic analysis, suppo
 
 ## Installation
 
+### From PyPI (Recommended)
+
+```bash
+pip install spinlab-sim
+```
+
+### From GitHub
+
+```bash
+pip install git+https://github.com/Akram-Ibrahim/SpinLab.git
+```
+
 ### From Source
 
 ```bash
@@ -43,6 +55,7 @@ pip install -e .
 ```python
 import numpy as np
 from ase.build import bulk
+import spinlab
 from spinlab import SpinSystem, MonteCarlo, check_numba_availability
 from spinlab.core.hamiltonian import Hamiltonian
 

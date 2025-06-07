@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include DEVELOPMENT_SUMMARY.md
+recursive-include examples *.py
+recursive-include spinlab *.py
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .DS_Store
