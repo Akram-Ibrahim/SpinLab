@@ -61,10 +61,10 @@ jupyter = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/akramibrahim/SpinLab"
+Homepage = "https://github.com/Akram-Ibrahim/SpinLab"
 Documentation = "https://spinlab.readthedocs.io"
-Repository = "https://github.com/akramibrahim/SpinLab"
-"Bug Tracker" = "https://github.com/akramibrahim/SpinLab/issues"
+Repository = "https://github.com/Akram-Ibrahim/SpinLab"
+"Bug Tracker" = "https://github.com/Akram-Ibrahim/SpinLab/issues"
 
 [project.scripts]
 spinlab = "spinlab.cli:main"

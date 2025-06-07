@@ -19,7 +19,7 @@ A comprehensive Python package for spin simulations and magnetic analysis, suppo
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/SpinLab.git
+git clone https://github.com/Akram-Ibrahim/SpinLab.git
 cd SpinLab
 pip install -e .
 ```
@@ -243,9 +243,9 @@ If you use SpinLab in your research, please cite:
 ```bibtex
 @software{spinlab2024,
   title={SpinLab: A Comprehensive Python Package for Spin Simulations},
-  author={Your Name},
+  author={Akram Ibrahim},
   year={2024},
-  url={https://github.com/yourusername/SpinLab}
+  url={https://github.com/Akram-Ibrahim/SpinLab}
 }
 ```
 
