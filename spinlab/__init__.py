@@ -18,9 +18,13 @@ from . import utils
 # Note: IO functionality is available in utils.io module
 
 from .core import SpinSystem, MonteCarlo, ParallelMonteCarlo
+from .core.hamiltonian import Hamiltonian, ClusterExpansionTerm, KitaevTerm
 from .dynamics import LLGSolver
 from .optimization import SpinOptimizer
 from .analysis import ThermodynamicsAnalyzer
+
+# Cluster expansion utilities
+from .utils import ClusterExpansionBuilder, create_bipartite_hamiltonian, create_triangular_hamiltonian
 
 # Performance utilities
 from .core.fast_ops import check_numba_availability, HAS_NUMBA
@@ -30,9 +34,15 @@ __all__ = [
     "SpinSystem",
     "MonteCarlo",
     "ParallelMonteCarlo",
+    "Hamiltonian",
+    "ClusterExpansionTerm", 
+    "KitaevTerm",
     "LLGSolver",
     "SpinOptimizer",
     "ThermodynamicsAnalyzer",
+    "ClusterExpansionBuilder",
+    "create_bipartite_hamiltonian",
+    "create_triangular_hamiltonian",
     "check_numba_availability",
     "HAS_NUMBA",
     "run_performance_test",
