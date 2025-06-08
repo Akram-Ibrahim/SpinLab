@@ -32,12 +32,19 @@ class ParallelMonteCarlo:
         
         Args:
             spin_system: SpinSystem to simulate
-            n_cores: Number of CPU cores to use (None = all available)
+            n_cores: Number of CPU cores to use (None = auto-detect safe limit)
         """
         self.spin_system = spin_system
-        self.n_cores = n_cores if n_cores is not None else mp.cpu_count()
         
-        print(f"🚀 Parallel MC initialized: {self.n_cores} CPU cores available")
+        # Conservative core detection to avoid overwhelming the system
+        max_cores = mp.cpu_count()
+        if n_cores is None:
+            # Use conservative limit: max 80% of cores or 20 cores, whichever is smaller
+            self.n_cores = min(max_cores, 20, max(1, int(max_cores * 0.8)))
+        else:
+            self.n_cores = min(n_cores, max_cores)
+        
+        print(f"🚀 Parallel MC initialized: {self.n_cores} cores (out of {max_cores} available)")
     
     def run(
         self,
