@@ -180,7 +180,7 @@ def example_4_monte_carlo_simulation():
         structure=structure,
         hamiltonian=hamiltonian,
         spin_magnitude=1.0,
-        magnetic_model="heisenberg"
+        magnetic_model="3d"
     )
     
     # Set initial random configuration

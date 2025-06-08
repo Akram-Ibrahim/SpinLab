@@ -18,7 +18,7 @@ from . import utils
 # Note: IO functionality is available in utils.io module
 
 from .core import SpinSystem, MonteCarlo, ParallelMonteCarlo
-from .core.hamiltonian import Hamiltonian, ClusterExpansionTerm, KitaevTerm
+from .core.hamiltonian import Hamiltonian, KitaevTerm
 from .dynamics import LLGSolver
 from .optimization import SpinOptimizer
 from .analysis import ThermodynamicsAnalyzer
@@ -35,7 +35,7 @@ __all__ = [
     "MonteCarlo",
     "ParallelMonteCarlo",
     "Hamiltonian",
-    "ClusterExpansionTerm", 
+ 
     "KitaevTerm",
     "LLGSolver",
     "SpinOptimizer",

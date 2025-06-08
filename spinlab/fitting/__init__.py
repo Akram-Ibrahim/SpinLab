@@ -5,7 +5,7 @@ This module provides tools to fit magnetic interaction parameters from
 spin configurations and energies using cluster expansion methods.
 """
 
-from .fit_exchange import (
+from .fit_pairwise_interactions import (
     design_matrix,
     design_matrix_batch, 
     fit_parameters,
@@ -13,7 +13,7 @@ from .fit_exchange import (
     predict_energy
 )
 
-from .pair_hamiltonian import PairHamiltonian
+from .parameterised_spin_hamiltonian import PairHamiltonian
 
 __all__ = [
     "design_matrix",

@@ -7,9 +7,8 @@ from typing import Dict, List, Optional, Union, Callable, Any
 from abc import ABC, abstractmethod
 
 from .fast_ops import (
-    fast_exchange_energy, fast_anisotropic_exchange_energy,
-    fast_single_ion_anisotropy_energy, fast_zeeman_energy,
-    fast_dmi_energy, fast_effective_field, HAS_NUMBA
+    fast_exchange_energy, fast_single_ion_anisotropy_energy, 
+    fast_magnetic_field_energy, fast_dmi_energy, fast_effective_field, HAS_NUMBA
 )
 
 
@@ -116,84 +115,6 @@ class ExchangeTerm(HamiltonianTerm):
             return field
 
 
-class AnisotropicExchangeTerm(HamiltonianTerm):
-    """Anisotropic exchange interaction with full coupling matrix."""
-    
-    def __init__(
-        self, 
-        coupling_matrix: np.ndarray, 
-        neighbor_shell: str = "shell_1",
-        use_fast: bool = True
-    ):
-        """
-        Initialize anisotropic exchange term.
-        
-        Args:
-            coupling_matrix: 3x3 coupling matrix (eV)
-            neighbor_shell: Which neighbor shell to use
-            use_fast: Whether to use Numba acceleration
-        """
-        self.coupling_matrix = np.array(coupling_matrix, dtype=np.float64)
-        self.neighbor_shell = neighbor_shell
-        self.use_fast = use_fast and HAS_NUMBA
-        
-        if self.coupling_matrix.shape != (3, 3):
-            raise ValueError("Coupling matrix must be 3x3")
-    
-    def calculate_energy(
-        self, 
-        spins: np.ndarray, 
-        neighbors: Dict[str, np.ndarray],
-        positions: np.ndarray,
-        **kwargs
-    ) -> np.ndarray:
-        """Calculate anisotropic exchange energy."""
-        if self.neighbor_shell not in neighbors:
-            return np.zeros(len(spins))
-        
-        neighbor_array = neighbors[self.neighbor_shell]
-        
-        if self.use_fast:
-            # Use fast Numba implementation
-            return fast_anisotropic_exchange_energy(spins, neighbor_array, self.coupling_matrix)
-        else:
-            # Fallback NumPy implementation
-            neighbor_spins = spins[neighbor_array]
-            
-            energies = np.zeros(len(spins))
-            
-            for i in range(len(spins)):
-                site_spin = spins[i]
-                valid_neighbors = neighbor_array[i][neighbor_array[i] >= 0]
-                for j in valid_neighbors:
-                    j_spin = spins[j]
-                    # Energy = -Si · J · Sj
-                    energy_contrib = -np.dot(site_spin, np.dot(self.coupling_matrix, j_spin))
-                    energies[i] += energy_contrib
-            
-            return energies / 2.0  # Avoid double counting
-    
-    def calculate_field(
-        self, 
-        spins: np.ndarray, 
-        neighbors: Dict[str, np.ndarray],
-        positions: np.ndarray,
-        site_idx: int,
-        **kwargs
-    ) -> np.ndarray:
-        """Calculate effective field from anisotropic exchange."""
-        if self.neighbor_shell not in neighbors:
-            return np.zeros(3)
-        
-        neighbor_indices = neighbors[self.neighbor_shell][site_idx]
-        neighbor_spins = spins[neighbor_indices]
-        
-        field = np.zeros(3)
-        for j_spin in neighbor_spins:
-            field += np.dot(self.coupling_matrix, j_spin)
-        
-        return field
-
 
 class SingleIonAnisotropyTerm(HamiltonianTerm):
     """Single-ion anisotropy term."""
@@ -243,8 +164,8 @@ class SingleIonAnisotropyTerm(HamiltonianTerm):
         return field
 
 
-class ZeemanTerm(HamiltonianTerm):
-    """Zeeman interaction with external magnetic field."""
+class MagneticFieldTerm(HamiltonianTerm):
+    """Magnetic field interaction with external field."""
     
     def __init__(
         self, 
@@ -254,7 +175,7 @@ class ZeemanTerm(HamiltonianTerm):
         use_fast: bool = True
     ):
         """
-        Initialize Zeeman term.
+        Initialize magnetic field term.
         
         Args:
             B_field: Magnetic field vector [Bx, By, Bz] (Tesla)
@@ -274,10 +195,10 @@ class ZeemanTerm(HamiltonianTerm):
         positions: np.ndarray,
         **kwargs
     ) -> np.ndarray:
-        """Calculate Zeeman energy: -μ·B = -g*μB*Si·B"""
+        """Calculate magnetic field energy: -μ·B = -g*μB*Si·B"""
         if self.use_fast:
             # Use fast Numba implementation
-            return fast_zeeman_energy(spins, self.B_field, self.g_factor)
+            return fast_magnetic_field_energy(spins, self.B_field, self.g_factor)
         else:
             # Fallback NumPy implementation
             factor = -self.g_factor * self.mu_B
@@ -490,330 +411,44 @@ class KitaevTerm(HamiltonianTerm):
         return field
 
 
-class ClusterExpansionTerm(HamiltonianTerm):
-    """
-    Comprehensive cluster expansion Hamiltonian with sublattice resolution.
-    
-    Implements:
-        H = Σ_{k,L,M} J_k^{LM} Σ_{⟨ij⟩_k^{LM}} s_i · s_j                    (isotropic exchange)
-            + Σ_{k,L,M,γ} K_{k,γ}^{LM} Σ_{⟨ij⟩_k^{LM,γ}} s_i^γ s_j^γ      (Kitaev interactions)
-            + D_z Σ_{⟨ij⟩_1} ẑ · (s_i × s_j)                               (DMI)
-            + Σ_L A^L Σ_{i∈L} (s_i^z)^2                                     (single-ion per sublattice)
-    
-    Where L,M label sublattices and k labels neighbor shells.
-    """
-    
-    def __init__(
-        self,
-        shell_list: List[int],
-        sublattice_indices: Optional[np.ndarray] = None,
-        J_params: Optional[Dict[str, float]] = None,
-        K_params: Optional[Dict[str, float]] = None,
-        A_params: Optional[Dict[str, float]] = None,
-        D_z: Optional[float] = None,
-        bond_directions: Optional[Dict[tuple, str]] = None,
-        use_fast: bool = True
-    ):
-        """
-        Initialize cluster expansion term.
-        
-        Args:
-            shell_list: List of neighbor shells to include [1, 2, 3, ...]
-            sublattice_indices: Array [N] assigning each site to sublattice (0, 1, 2, ...)
-            J_params: Isotropic exchange parameters {"J1_AA": value, "J1_AB": value, ...}
-            K_params: Kitaev parameters {"K1_x_AA": value, "K1_y_AB": value, ...}
-            A_params: Single-ion anisotropy {"A_A": value, "A_B": value, ...}
-            D_z: DMI parameter (scalar)
-            bond_directions: Dict mapping (i,j) -> "x"/"y"/"z" for Kitaev bonds
-            use_fast: Whether to use Numba acceleration
-        """
-        self.shell_list = shell_list
-        self.sublattice_indices = sublattice_indices
-        self.J_params = J_params or {}
-        self.K_params = K_params or {}
-        self.A_params = A_params or {}
-        self.D_z = D_z or 0.0
-        self.bond_directions = bond_directions or {}
-        self.use_fast = use_fast and HAS_NUMBA
-        
-        # Determine number of sublattices
-        if sublattice_indices is not None:
-            self.n_sublattices = int(np.max(sublattice_indices)) + 1
-            self.sublattice_names = [chr(ord('A') + i) for i in range(self.n_sublattices)]
-        else:
-            self.n_sublattices = 1
-            self.sublattice_names = ['A']
-    
-    def _get_sublattice_pair_name(self, sub_i: int, sub_j: int) -> str:
-        """Get sublattice pair name (e.g., 'AA', 'AB')."""
-        name_i = self.sublattice_names[sub_i]
-        name_j = self.sublattice_names[sub_j]
-        return f"{name_i}{name_j}"
-    
-    def calculate_energy(
-        self, 
-        spins: np.ndarray, 
-        neighbors: Dict[str, np.ndarray],
-        positions: np.ndarray,
-        **kwargs
-    ) -> np.ndarray:
-        """Calculate cluster expansion energy."""
-        N = len(spins)
-        energies = np.zeros(N)
-        
-        # Isotropic exchange contributions
-        energies += self._calculate_exchange_energy(spins, neighbors)
-        
-        # Kitaev contributions
-        energies += self._calculate_kitaev_energy(spins, neighbors)
-        
-        # Single-ion anisotropy contributions
-        energies += self._calculate_single_ion_energy(spins)
-        
-        # DMI contributions
-        energies += self._calculate_dmi_energy(spins, neighbors)
-        
-        return energies
-    
-    def _calculate_exchange_energy(self, spins: np.ndarray, neighbors: Dict[str, np.ndarray]) -> np.ndarray:
-        """Calculate isotropic exchange energy with sublattice resolution."""
-        N = len(spins)
-        energies = np.zeros(N)
-        
-        for shell_k in self.shell_list:
-            shell_name = f"shell_{shell_k}"
-            if shell_name not in neighbors:
-                continue
-            
-            neighbor_array = neighbors[shell_name]
-            
-            for i in range(N):
-                sub_i = self.sublattice_indices[i] if self.sublattice_indices is not None else 0
-                neighbor_indices = neighbor_array[i]
-                valid_neighbors = neighbor_indices[neighbor_indices >= 0]
-                
-                for j in valid_neighbors:
-                    sub_j = self.sublattice_indices[j] if self.sublattice_indices is not None else 0
-                    
-                    # Get parameter name
-                    pair_name = self._get_sublattice_pair_name(sub_i, sub_j)
-                    param_name = f"J{shell_k}_{pair_name}"
-                    
-                    if param_name in self.J_params:
-                        J_k = self.J_params[param_name]
-                        dot_product = np.dot(spins[i], spins[j])
-                        energies[i] += J_k * dot_product
-        
-        return energies / 2.0  # Avoid double counting
-    
-    def _calculate_kitaev_energy(self, spins: np.ndarray, neighbors: Dict[str, np.ndarray]) -> np.ndarray:
-        """Calculate Kitaev energy with sublattice resolution."""
-        N = len(spins)
-        energies = np.zeros(N)
-        
-        for shell_k in self.shell_list:
-            shell_name = f"shell_{shell_k}"
-            if shell_name not in neighbors:
-                continue
-            
-            neighbor_array = neighbors[shell_name]
-            
-            for i in range(N):
-                sub_i = self.sublattice_indices[i] if self.sublattice_indices is not None else 0
-                neighbor_indices = neighbor_array[i]
-                valid_neighbors = neighbor_indices[neighbor_indices >= 0]
-                
-                for j in valid_neighbors:
-                    sub_j = self.sublattice_indices[j] if self.sublattice_indices is not None else 0
-                    
-                    # Determine bond direction
-                    bond_key = (min(i, j), max(i, j))
-                    bond_dir = self.bond_directions.get(bond_key, "z")
-                    
-                    # Get parameter name
-                    pair_name = self._get_sublattice_pair_name(sub_i, sub_j)
-                    param_name = f"K{shell_k}_{bond_dir}_{pair_name}"
-                    
-                    if param_name in self.K_params:
-                        K_gamma = self.K_params[param_name]
-                        gamma_idx = {"x": 0, "y": 1, "z": 2}[bond_dir]
-                        
-                        # K_γ s_i^γ s_j^γ
-                        energy_contrib = K_gamma * spins[i, gamma_idx] * spins[j, gamma_idx]
-                        energies[i] += energy_contrib
-        
-        return energies / 2.0  # Avoid double counting
-    
-    def _calculate_single_ion_energy(self, spins: np.ndarray) -> np.ndarray:
-        """Calculate single-ion anisotropy energy with sublattice resolution."""
-        N = len(spins)
-        energies = np.zeros(N)
-        
-        for i in range(N):
-            sub_i = self.sublattice_indices[i] if self.sublattice_indices is not None else 0
-            sublattice_name = self.sublattice_names[sub_i]
-            param_name = f"A_{sublattice_name}"
-            
-            if param_name in self.A_params:
-                A_L = self.A_params[param_name]
-                # A^L (s_i^z)^2
-                energies[i] = A_L * spins[i, 2]**2
-        
-        return energies
-    
-    def _calculate_dmi_energy(self, spins: np.ndarray, neighbors: Dict[str, np.ndarray]) -> np.ndarray:
-        """Calculate DMI energy (typically no sublattice resolution)."""
-        N = len(spins)
-        energies = np.zeros(N)
-        
-        if abs(self.D_z) < 1e-12:  # No DMI
-            return energies
-        
-        shell_1_name = "shell_1"
-        if shell_1_name not in neighbors:
-            return energies
-        
-        neighbor_array = neighbors[shell_1_name]
-        
-        for i in range(N):
-            neighbor_indices = neighbor_array[i]
-            valid_neighbors = neighbor_indices[neighbor_indices >= 0]
-            
-            for j in valid_neighbors:
-                # D_z ẑ · (s_i × s_j)
-                cross_product = np.cross(spins[i], spins[j])
-                z_component = cross_product[2]
-                energies[i] += self.D_z * z_component
-        
-        return energies / 2.0  # Avoid double counting
-    
-    def calculate_field(
-        self, 
-        spins: np.ndarray, 
-        neighbors: Dict[str, np.ndarray],
-        positions: np.ndarray,
-        site_idx: int,
-        **kwargs
-    ) -> np.ndarray:
-        """Calculate effective field at a specific site."""
-        field = np.zeros(3)
-        
-        # Exchange field contributions
-        field += self._calculate_exchange_field(spins, neighbors, site_idx)
-        
-        # Kitaev field contributions
-        field += self._calculate_kitaev_field(spins, neighbors, site_idx)
-        
-        # Single-ion field contributions
-        field += self._calculate_single_ion_field(spins, site_idx)
-        
-        # DMI field contributions
-        field += self._calculate_dmi_field(spins, neighbors, site_idx)
-        
-        return field
-    
-    def _calculate_exchange_field(self, spins: np.ndarray, neighbors: Dict[str, np.ndarray], site_idx: int) -> np.ndarray:
-        """Calculate exchange field at site_idx."""
-        field = np.zeros(3)
-        sub_i = self.sublattice_indices[site_idx] if self.sublattice_indices is not None else 0
-        
-        for shell_k in self.shell_list:
-            shell_name = f"shell_{shell_k}"
-            if shell_name not in neighbors:
-                continue
-            
-            neighbor_indices = neighbors[shell_name][site_idx]
-            valid_neighbors = neighbor_indices[neighbor_indices >= 0]
-            
-            for j in valid_neighbors:
-                sub_j = self.sublattice_indices[j] if self.sublattice_indices is not None else 0
-                pair_name = self._get_sublattice_pair_name(sub_i, sub_j)
-                param_name = f"J{shell_k}_{pair_name}"
-                
-                if param_name in self.J_params:
-                    J_k = self.J_params[param_name]
-                    field += J_k * spins[j]
-        
-        return field
-    
-    def _calculate_kitaev_field(self, spins: np.ndarray, neighbors: Dict[str, np.ndarray], site_idx: int) -> np.ndarray:
-        """Calculate Kitaev field at site_idx."""
-        field = np.zeros(3)
-        sub_i = self.sublattice_indices[site_idx] if self.sublattice_indices is not None else 0
-        
-        for shell_k in self.shell_list:
-            shell_name = f"shell_{shell_k}"
-            if shell_name not in neighbors:
-                continue
-            
-            neighbor_indices = neighbors[shell_name][site_idx]
-            valid_neighbors = neighbor_indices[neighbor_indices >= 0]
-            
-            for j in valid_neighbors:
-                sub_j = self.sublattice_indices[j] if self.sublattice_indices is not None else 0
-                
-                # Determine bond direction
-                bond_key = (min(site_idx, j), max(site_idx, j))
-                bond_dir = self.bond_directions.get(bond_key, "z")
-                
-                pair_name = self._get_sublattice_pair_name(sub_i, sub_j)
-                param_name = f"K{shell_k}_{bond_dir}_{pair_name}"
-                
-                if param_name in self.K_params:
-                    K_gamma = self.K_params[param_name]
-                    gamma_idx = {"x": 0, "y": 1, "z": 2}[bond_dir]
-                    
-                    # H_i^γ = K_γ s_j^γ (field component only in γ direction)
-                    field[gamma_idx] += K_gamma * spins[j, gamma_idx]
-        
-        return field
-    
-    def _calculate_single_ion_field(self, spins: np.ndarray, site_idx: int) -> np.ndarray:
-        """Calculate single-ion field at site_idx."""
-        field = np.zeros(3)
-        sub_i = self.sublattice_indices[site_idx] if self.sublattice_indices is not None else 0
-        sublattice_name = self.sublattice_names[sub_i]
-        param_name = f"A_{sublattice_name}"
-        
-        if param_name in self.A_params:
-            A_L = self.A_params[param_name]
-            # H_i^z = 2 A^L s_i^z
-            field[2] = 2 * A_L * spins[site_idx, 2]
-        
-        return field
-    
-    def _calculate_dmi_field(self, spins: np.ndarray, neighbors: Dict[str, np.ndarray], site_idx: int) -> np.ndarray:
-        """Calculate DMI field at site_idx."""
-        field = np.zeros(3)
-        
-        if abs(self.D_z) < 1e-12:  # No DMI
-            return field
-        
-        shell_1_name = "shell_1"
-        if shell_1_name not in neighbors:
-            return field
-        
-        neighbor_indices = neighbors[shell_1_name][site_idx]
-        valid_neighbors = neighbor_indices[neighbor_indices >= 0]
-        z_hat = np.array([0, 0, 1])
-        
-        for j in valid_neighbors:
-            # H_i = D_z (ẑ × s_j)
-            cross_product = np.cross(z_hat, spins[j])
-            field += self.D_z * cross_product
-        
-        return field
-
-
 class Hamiltonian:
     """
     Flexible Hamiltonian class that combines multiple interaction terms.
+    
+    Supports both single-lattice and sublattice-resolved parameters.
+    Parameters can come from any source: cluster expansion fitting, DFT, experiments, etc.
     """
     
-    def __init__(self):
-        """Initialize empty Hamiltonian."""
+    def __init__(self, sublattices: Optional[Dict[str, List[int]]] = None):
+        """
+        Initialize Hamiltonian.
+        
+        Args:
+            sublattices: Optional dict mapping sublattice names to site indices
+                        e.g., {"A": [0, 2, 4], "B": [1, 3, 5]} for bipartite lattice
+        """
         self.terms: List[HamiltonianTerm] = []
         self.term_names: List[str] = []
+        self.sublattices = sublattices or {}
+        self._validate_sublattices()
+    
+    def _validate_sublattices(self):
+        """Validate sublattice definitions."""
+        if not self.sublattices:
+            return
+        
+        # Check for overlapping sites
+        all_sites = []
+        for sublattice_sites in self.sublattices.values():
+            all_sites.extend(sublattice_sites)
+        
+        if len(all_sites) != len(set(all_sites)):
+            raise ValueError("Sublattices contain overlapping sites")
+    
+    def set_sublattices(self, sublattices: Dict[str, List[int]]):
+        """Set or update sublattice definitions."""
+        self.sublattices = sublattices
+        self._validate_sublattices()
     
     def add_term(self, term: HamiltonianTerm, name: str):
         """Add a Hamiltonian term."""
@@ -822,48 +457,81 @@ class Hamiltonian:
     
     def add_exchange(
         self, 
-        J: float, 
+        J: Union[float, Dict[str, float]], 
         neighbor_shell: str = "shell_1",
+        sublattice_pairs: Optional[Dict[tuple, str]] = None,
         name: Optional[str] = None
     ):
-        """Add isotropic exchange term."""
-        if name is None:
-            name = f"exchange_{neighbor_shell}"
+        """
+        Add isotropic exchange term(s).
         
-        term = ExchangeTerm(J, neighbor_shell)
-        self.add_term(term, name)
+        Args:
+            J: Exchange coupling. Can be:
+               - float: Single coupling for all interactions
+               - Dict[str, float]: Sublattice-resolved couplings like {"AA": J_AA, "AB": J_AB}
+            neighbor_shell: Which neighbor shell to use
+            sublattice_pairs: Optional mapping of (sublattice1, sublattice2) -> interaction_type
+            name: Optional name override
+        """
+        if isinstance(J, dict):
+            # Sublattice-resolved exchange
+            for pair_key, coupling in J.items():
+                pair_name = name or f"exchange_{pair_key}_{neighbor_shell}"
+                term = ExchangeTerm(coupling, neighbor_shell)
+                self.add_term(term, pair_name)
+        else:
+            # Single exchange coupling
+            if name is None:
+                name = f"exchange_{neighbor_shell}"
+            term = ExchangeTerm(J, neighbor_shell)
+            self.add_term(term, name)
     
-    def add_anisotropic_exchange(
-        self,
-        coupling_matrix: np.ndarray,
-        neighbor_shell: str = "shell_1", 
-        name: Optional[str] = None
-    ):
-        """Add anisotropic exchange term."""
-        if name is None:
-            name = f"anisotropic_exchange_{neighbor_shell}"
-        
-        term = AnisotropicExchangeTerm(coupling_matrix, neighbor_shell)
-        self.add_term(term, name)
     
     def add_single_ion_anisotropy(
         self, 
-        K: float, 
-        axis: np.ndarray = np.array([0, 0, 1]),
-        name: str = "single_ion_anisotropy"
+        K: Union[float, Dict[str, float]], 
+        axis: Union[np.ndarray, Dict[str, np.ndarray]] = np.array([0, 0, 1]),
+        name: Optional[str] = None
     ):
-        """Add single-ion anisotropy term."""
-        term = SingleIonAnisotropyTerm(K, axis)
-        self.add_term(term, name)
+        """
+        Add single-ion anisotropy term(s).
+        
+        Args:
+            K: Anisotropy constant. Can be:
+               - float: Single value for all sites
+               - Dict[str, float]: Sublattice-resolved values like {"A": K_A, "B": K_B}
+            axis: Easy axis. Can be:
+                  - np.ndarray: Single axis for all sites  
+                  - Dict[str, np.ndarray]: Sublattice-resolved axes
+            name: Optional name override
+        """
+        if isinstance(K, dict):
+            # Sublattice-resolved anisotropy
+            for sublattice, K_val in K.items():
+                # Get axis for this sublattice
+                if isinstance(axis, dict):
+                    sublattice_axis = axis.get(sublattice, np.array([0, 0, 1]))
+                else:
+                    sublattice_axis = axis
+                
+                sublattice_name = name or f"single_ion_anisotropy_{sublattice}"
+                term = SingleIonAnisotropyTerm(K_val, sublattice_axis)
+                self.add_term(term, sublattice_name)
+        else:
+            # Single anisotropy for all sites
+            if name is None:
+                name = "single_ion_anisotropy"
+            term = SingleIonAnisotropyTerm(K, axis)
+            self.add_term(term, name)
     
-    def add_zeeman(
+    def add_magnetic_field(
         self, 
         B_field: np.ndarray, 
         g_factor: float = 2.0,
-        name: str = "zeeman"
+        name: str = "magnetic_field"
     ):
-        """Add Zeeman term."""
-        term = ZeemanTerm(B_field, g_factor)
+        """Add magnetic field term."""
+        term = MagneticFieldTerm(B_field, g_factor)
         self.add_term(term, name)
     
     def add_electric_field(
@@ -903,40 +571,88 @@ class Hamiltonian:
         term = KitaevTerm(K_couplings, neighbor_shell, bond_directions)
         self.add_term(term, name)
     
-    def add_cluster_expansion(
+    def add_interactions_from_parameters(
         self,
-        shell_list: List[int],
-        sublattice_indices: Optional[np.ndarray] = None,
-        J_params: Optional[Dict[str, float]] = None,
-        K_params: Optional[Dict[str, float]] = None,
-        A_params: Optional[Dict[str, float]] = None,
-        D_z: Optional[float] = None,
-        bond_directions: Optional[Dict[tuple, str]] = None,
-        name: str = "cluster_expansion"
+        parameters: Dict[str, Any],
+        neighbor_shells: Optional[List[str]] = None
     ):
         """
-        Add comprehensive cluster expansion term.
+        Add multiple interactions from fitted parameters dictionary.
+        
+        This is the main interface for parameters obtained from cluster expansion
+        fitting, DFT calculations, or experimental fits.
         
         Args:
-            shell_list: List of neighbor shells to include [1, 2, 3, ...]
-            sublattice_indices: Array [N] assigning each site to sublattice (0, 1, 2, ...)
-            J_params: Isotropic exchange parameters {"J1_AA": value, "J1_AB": value, ...}
-            K_params: Kitaev parameters {"K1_x_AA": value, "K1_y_AB": value, ...}
-            A_params: Single-ion anisotropy {"A_A": value, "A_B": value, ...}
-            D_z: DMI parameter (scalar)
-            bond_directions: Dict mapping (i,j) -> "x"/"y"/"z" for Kitaev bonds
-            name: Name for this term
+            parameters: Dict containing interaction parameters, e.g.:
+                       {
+                           "exchange": {"AA": -0.1, "AB": 0.05},  # Sublattice-resolved
+                           "single_ion_anisotropy": {"A": 0.02, "B": -0.01},
+                           "kitaev": {"x": 0.03, "y": 0.03, "z": 0.04},
+                           "magnetic_field": [0, 0, 0.1],
+                           "dmi": [0.01, 0, 0]
+                       }
+            neighbor_shells: List of neighbor shells to consider
         """
-        term = ClusterExpansionTerm(
-            shell_list=shell_list,
-            sublattice_indices=sublattice_indices,
-            J_params=J_params,
-            K_params=K_params,
-            A_params=A_params,
-            D_z=D_z,
-            bond_directions=bond_directions
-        )
-        self.add_term(term, name)
+        if neighbor_shells is None:
+            neighbor_shells = ["shell_1"]
+        
+        # Add exchange interactions
+        if "exchange" in parameters:
+            for shell in neighbor_shells:
+                self.add_exchange(
+                    parameters["exchange"], 
+                    neighbor_shell=shell,
+                    name=f"exchange_{shell}"
+                )
+        
+        # Add single-ion anisotropy
+        if "single_ion_anisotropy" in parameters:
+            self.add_single_ion_anisotropy(
+                parameters["single_ion_anisotropy"],
+                name="single_ion_anisotropy"
+            )
+        
+        # Add Kitaev interactions
+        if "kitaev" in parameters:
+            for shell in neighbor_shells:
+                self.add_kitaev(
+                    parameters["kitaev"],
+                    neighbor_shell=shell,
+                    name=f"kitaev_{shell}"
+                )
+        
+        # Add DMI
+        if "dmi" in parameters:
+            for shell in neighbor_shells:
+                self.add_dmi(
+                    parameters["dmi"],
+                    neighbor_shell=shell,
+                    name=f"dmi_{shell}"
+                )
+        
+        # Add magnetic field
+        if "magnetic_field" in parameters:
+            self.add_magnetic_field(
+                parameters["magnetic_field"],
+                name="magnetic_field"
+            )
+        
+        # Add electric field
+        if "electric_field" in parameters:
+            self.add_electric_field(
+                parameters["electric_field"]["field"],
+                parameters["electric_field"]["gamma"],
+                name="electric_field"
+            )
+    
+    def get_sublattice_info(self) -> Dict[str, Any]:
+        """Get information about sublattice setup."""
+        return {
+            "sublattices": self.sublattices,
+            "n_sublattices": len(self.sublattices),
+            "sublattice_names": list(self.sublattices.keys()) if self.sublattices else [],
+            "has_sublattices": bool(self.sublattices)
+        }
     
     def calculate_energy(
         self, 

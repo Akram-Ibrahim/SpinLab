@@ -17,7 +17,7 @@ class SpinSystem:
     Core class for managing spin systems, configurations, and structures.
     
     This class provides a unified interface for handling different types of
-    magnetic systems (Ising, XY, Heisenberg) with flexible Hamiltonian definitions.
+    magnetic systems (Ising, XY, 3D) with flexible Hamiltonian definitions.
     """
     
     def __init__(
@@ -25,7 +25,7 @@ class SpinSystem:
         structure: Atoms,
         hamiltonian: Hamiltonian,
         spin_magnitude: float = 1.0,
-        magnetic_model: str = "heisenberg",
+        magnetic_model: str = "3d",
         use_fast: bool = True
     ):
         """
@@ -35,7 +35,7 @@ class SpinSystem:
             structure: ASE Atoms object describing the atomic structure
             hamiltonian: Hamiltonian object defining interactions
             spin_magnitude: Magnitude of spins (default: 1.0)
-            magnetic_model: Type of magnetic model ("ising", "xy", "heisenberg")
+            magnetic_model: Type of magnetic model ("ising", "xy", "3d")
             use_fast: Whether to use Numba acceleration
         """
         self.structure = structure.copy()
@@ -55,7 +55,7 @@ class SpinSystem:
         self._neighbors = {}
         
         # Validate magnetic model
-        valid_models = ["ising", "xy", "heisenberg", "3d"]
+        valid_models = ["ising", "xy", "3d"]
         if self.magnetic_model not in valid_models:
             raise ValueError(f"Invalid magnetic model: {self.magnetic_model}. "
                            f"Must be one of {valid_models}")
@@ -162,7 +162,7 @@ class SpinSystem:
             phi_values = np.arange(0, 360, angular_resolution)
             return np.array([[90.0, phi] for phi in phi_values])
         
-        elif self.magnetic_model in ["heisenberg", "3d"]:
+        elif self.magnetic_model == "3d":
             # Full 3D orientations with uniform distribution on sphere
             n_divs = int(180 / angular_resolution)
             v_values = np.linspace(0, 1, n_divs, endpoint=False)

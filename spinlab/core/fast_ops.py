@@ -46,11 +46,9 @@ def fast_exchange_energy(spins, neighbor_array, J):
         energy = 0.0
         for j_idx in range(max_neighbors):
             j = neighbor_array[i, j_idx]
-            if j >= 0 and j < n_spins:  # Valid neighbor
-                # Manual dot product for numba
-                dot_product = (spins[i, 0] * spins[j, 0] + 
-                             spins[i, 1] * spins[j, 1] + 
-                             spins[i, 2] * spins[j, 2])
+            if j >= 0:  # Valid neighbor (bounds check removed - neighbor finding ensures validity)
+                # Use numpy dot product (Numba optimizes this well)
+                dot_product = np.dot(spins[i], spins[j])
                 energy += -J * dot_product
         energies[i] = energy * 0.5  # Avoid double counting
     
@@ -111,19 +109,15 @@ def fast_single_ion_anisotropy_energy(spins, K, axis):
     n_spins = spins.shape[0]
     energies = np.zeros(n_spins)
     
-    for i in prange(n_spins):
-        dot_product = (spins[i, 0] * axis[0] + 
-                      spins[i, 1] * axis[1] + 
-                      spins[i, 2] * axis[2])
-        energies[i] = -K * dot_product * dot_product
-    
-    return energies
+    # Full vectorization for single-ion anisotropy
+    dot_products = spins @ axis  # All dot products at once
+    return -K * dot_products * dot_products
 
 
 @njit(parallel=True, fastmath=True)
-def fast_zeeman_energy(spins, B_field, g_factor):
+def fast_magnetic_field_energy(spins, B_field, g_factor):
     """
-    Fast Zeeman energy calculation.
+    Fast magnetic field energy calculation.
     
     Args:
         spins: (n_spins, 3) array of spin vectors
@@ -138,13 +132,9 @@ def fast_zeeman_energy(spins, B_field, g_factor):
     
     factor = -g_factor * MU_B_EV_T
     
-    for i in prange(n_spins):
-        dot_product = (spins[i, 0] * B_field[0] + 
-                      spins[i, 1] * B_field[1] + 
-                      spins[i, 2] * B_field[2])
-        energies[i] = factor * dot_product
-    
-    return energies
+    # Full vectorization - compute all dot products at once
+    # spins @ B_field gives dot product for each spin
+    return factor * (spins @ B_field)
 
 
 @njit(parallel=True, fastmath=True)
@@ -532,7 +522,7 @@ def get_fast_operations():
         'exchange_energy': fast_exchange_energy,
         'anisotropic_exchange_energy': fast_anisotropic_exchange_energy,
         'single_ion_anisotropy_energy': fast_single_ion_anisotropy_energy,
-        'zeeman_energy': fast_zeeman_energy,
+        'magnetic_field_energy': fast_magnetic_field_energy,
         'dmi_energy': fast_dmi_energy,
         'effective_field': fast_effective_field,
         'llg_rhs': fast_llg_rhs,
