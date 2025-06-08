@@ -56,7 +56,7 @@ pip install -e .
 import numpy as np
 from ase.build import bulk
 import spinlab
-from spinlab import SpinSystem, MonteCarlo, check_numba_availability
+from spinlab import SpinSystem, MonteCarlo, ParallelMonteCarlo, check_numba_availability
 from spinlab.core.hamiltonian import Hamiltonian
 
 # Check if Numba acceleration is available
@@ -84,6 +84,25 @@ results = mc.run(n_steps=10000, equilibration_steps=1000)
 
 print(f"Final energy: {results['final_energy']:.4f} eV")
 print(f"Final magnetization: {results['final_magnetization']}")
+```
+
+### Parallel Monte Carlo (Multi-CPU)
+
+```python
+# Use all available CPU cores for massive speedup
+pmc = ParallelMonteCarlo(spin_system, n_cores=40)  # Use 40 cores
+
+# Run 40 independent replicas in parallel (~40x speedup)
+results = pmc.run(
+    temperature=300.0,
+    n_steps=1000,
+    n_replicas=40,  # One replica per core
+    verbose=True
+)
+
+# Get enhanced statistics from multiple replicas
+print(f"Energy: {results['final_energy_mean']:.4f} ± {results['final_energy_sem']:.4f} eV")
+print(f"Best energy found: {results['best_energy']:.4f} eV")
 ```
 
 ### Input/Output Operations

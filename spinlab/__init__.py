@@ -17,7 +17,7 @@ from . import utils
 
 # Note: IO functionality is available in utils.io module
 
-from .core import SpinSystem, MonteCarlo
+from .core import SpinSystem, MonteCarlo, ParallelMonteCarlo
 from .dynamics import LLGSolver
 from .optimization import SpinOptimizer
 from .analysis import ThermodynamicsAnalyzer
@@ -28,7 +28,8 @@ from .utils.performance import run_performance_test, benchmark_numba_speedup
 
 __all__ = [
     "SpinSystem",
-    "MonteCarlo", 
+    "MonteCarlo",
+    "ParallelMonteCarlo",
     "LLGSolver",
     "SpinOptimizer",
     "ThermodynamicsAnalyzer",
