@@ -278,7 +278,10 @@ class ConjugateGradient(OptimizationMethod):
 
 class SimulatedAnnealing(OptimizationMethod):
     """
-    Simulated annealing optimization for spin systems.
+    Simulated annealing optimization using existing Monte Carlo infrastructure.
+    
+    Leverages the optimized Numba-accelerated Monte Carlo methods for 
+    efficient spin flipping with full Hamiltonian support.
     """
     
     def optimize(
@@ -291,103 +294,110 @@ class SimulatedAnnealing(OptimizationMethod):
         initial_temperature: float = 100.0,
         final_temperature: float = 0.1,
         cooling_rate: float = 0.95,
+        steps_per_temp: int = 10,
         **kwargs
     ) -> Dict[str, Any]:
-        """Optimize using simulated annealing."""
+        """Optimize using simulated annealing with Monte Carlo infrastructure."""
+        from ..monte_carlo import MonteCarlo
         
-        config = initial_config.copy()
-        energy = self.optimizer.objective_function(config)
+        # Set initial configuration
+        original_config = self.optimizer.spin_system.spin_config.copy() if self.optimizer.spin_system.spin_config is not None else None
+        self.optimizer.spin_system.spin_config = initial_config.copy()
         
-        best_config = config.copy()
-        best_energy = energy
+        best_config = initial_config.copy()
+        best_energy = self.optimizer.objective_function(initial_config)
         
+        current_energy = best_energy
         temperature = initial_temperature
-        energies = [energy]
+        energies = [current_energy]
         temperatures = [temperature]
         accepted_moves = 0
-        
-        # Get allowed orientations
-        orientations = self.optimizer.spin_system.generate_spin_orientations()
-        
-        kB = 8.617333e-5  # eV/K
+        total_moves = 0
         
         if verbose:
             pbar = tqdm(total=max_iterations, desc="SA Optimization")
         
-        for iteration in range(max_iterations):
-            # Generate new configuration by flipping random spins
-            new_config = config.copy()
-            n_flips = max(1, int(len(config) * 0.1))  # Flip 10% of spins
-            
-            for _ in range(n_flips):
-                spin_idx = np.random.randint(len(config))
-                orientation_idx = np.random.randint(len(orientations))
+        try:
+            for iteration in range(max_iterations):
+                # Create Monte Carlo instance at current temperature
+                mc = MonteCarlo(
+                    self.optimizer.spin_system, 
+                    temperature=temperature,
+                    use_fast=True
+                )
                 
-                theta, phi = np.radians(orientations[orientation_idx])
-                new_spin = self.optimizer.spin_system.spin_magnitude * np.array([
-                    np.sin(theta) * np.cos(phi),
-                    np.sin(theta) * np.sin(phi),
-                    np.cos(theta)
-                ])
-                new_config[spin_idx] = new_spin
-            
-            # Calculate new energy
-            new_energy = self.optimizer.objective_function(new_config)
-            
-            # Acceptance criterion
-            delta_energy = new_energy - energy
-            
-            if delta_energy < 0 or (temperature > 0 and 
-                                   np.random.random() < np.exp(-delta_energy / (kB * temperature))):
-                # Accept move
-                config = new_config
-                energy = new_energy
-                accepted_moves += 1
+                # Perform a few MC steps at this temperature
+                mc_result = mc.run(
+                    n_steps=steps_per_temp,
+                    equilibration_steps=0,
+                    sampling_interval=steps_per_temp,  # Only save final state
+                    verbose=False
+                )
                 
-                # Update best
-                if energy < best_energy:
-                    best_energy = energy
-                    best_config = config.copy()
-            
-            # Cool down
-            temperature *= cooling_rate
-            temperature = max(temperature, final_temperature)
-            
-            energies.append(energy)
-            temperatures.append(temperature)
-            
-            # Check convergence
-            if temperature <= final_temperature and abs(delta_energy) < tolerance:
+                # Get final state from MC run
+                new_energy = mc_result['final_energy']
+                total_moves += steps_per_temp
+                accepted_moves += mc_result['accepted_moves']
+                
+                # Update best configuration if improved
+                if new_energy < best_energy:
+                    best_energy = new_energy
+                    best_config = self.optimizer.spin_system.spin_config.copy()
+                
+                current_energy = new_energy
+                
+                # Cool down
+                temperature *= cooling_rate
+                temperature = max(temperature, final_temperature)
+                
+                energies.append(current_energy)
+                temperatures.append(temperature)
+                
+                # Check convergence
+                if temperature <= final_temperature:
+                    # Check for energy convergence
+                    if len(energies) > 10:
+                        recent_energies = energies[-10:]
+                        energy_std = np.std(recent_energies)
+                        if energy_std < tolerance:
+                            if verbose:
+                                print(f"\nConverged at iteration {iteration}")
+                            break
+                
+                # Callback
+                if callback is not None:
+                    callback(self.optimizer, iteration, self.optimizer.spin_system.spin_config)
+                
                 if verbose:
-                    print(f"\nConverged at iteration {iteration}")
-                break
-            
-            # Callback
-            if callback is not None:
-                callback(self.optimizer, iteration, config)
+                    pbar.set_postfix({
+                        'Energy': f'{current_energy:.6f}',
+                        'Best': f'{best_energy:.6f}',
+                        'T': f'{temperature:.2f}'
+                    })
+                    pbar.update(1)
             
             if verbose:
-                pbar.set_postfix({
-                    'Energy': f'{energy:.6f}',
-                    'Best': f'{best_energy:.6f}',
-                    'T': f'{temperature:.2f}'
-                })
-                pbar.update(1)
+                pbar.close()
+            
+            # Set final best configuration
+            self.optimizer.spin_system.spin_config = best_config
+            
+            acceptance_rate = accepted_moves / total_moves if total_moves > 0 else 0
+            
+            return {
+                'converged': temperature <= final_temperature,
+                'final_configuration': best_config,
+                'final_energy': best_energy,
+                'iterations': iteration + 1,
+                'acceptance_rate': acceptance_rate,
+                'final_temperature': temperature,
+                'energy_history': np.array(energies),
+                'temperature_history': np.array(temperatures)
+            }
         
-        if verbose:
-            pbar.close()
-        
-        acceptance_rate = accepted_moves / max_iterations
-        
-        return {
-            'converged': temperature <= final_temperature,
-            'final_configuration': best_config,
-            'final_energy': best_energy,
-            'iterations': iteration + 1,
-            'acceptance_rate': acceptance_rate,
-            'final_temperature': temperature,
-            'energy_history': np.array(energies),
-            'temperature_history': np.array(temperatures)
-        }
+        finally:
+            # Restore original configuration if something went wrong
+            if original_config is not None:
+                self.optimizer.spin_system.spin_config = original_config
 
 
