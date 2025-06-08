@@ -45,7 +45,8 @@ def run_parallel_mc_test(temperature=300.0, n_steps=2000, n_cores=None):
         n_replicas=n_cores,  # One replica per core
         equilibration_steps=max(100, n_steps//10),
         sampling_interval=10,
-        verbose=True
+        verbose=True,
+        show_individual_progress=True  # Show individual MC progress bars
     )
     end_time = time.time()
     

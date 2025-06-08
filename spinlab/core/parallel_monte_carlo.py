@@ -53,7 +53,8 @@ class ParallelMonteCarlo:
         n_replicas: Optional[int] = None,
         equilibration_steps: int = 1000,
         sampling_interval: int = 1,
-        verbose: bool = True
+        verbose: bool = True,
+        show_individual_progress: bool = False
     ) -> Dict[str, Any]:
         """
         Run multiple independent MC replicas in parallel.
@@ -65,6 +66,7 @@ class ParallelMonteCarlo:
             equilibration_steps: Equilibration steps per replica
             sampling_interval: Sampling interval
             verbose: Show progress
+            show_individual_progress: Show progress bars for individual replicas (only for ≤4 replicas by default)
             
         Returns:
             Aggregated results from all replicas with statistics
@@ -75,9 +77,14 @@ class ParallelMonteCarlo:
         if verbose:
             print(f"🔄 Running {n_replicas} parallel replicas at T={temperature}K")
             print(f"   {n_steps} steps per replica = {n_replicas * n_steps:,} total steps")
+            if show_individual_progress and n_replicas <= 4:
+                print(f"   📊 Individual MC progress bars will be shown for each replica")
         
         # Prepare arguments for each replica
         replica_args = []
+        # Show individual progress only for small numbers of replicas to avoid clutter
+        show_individual = show_individual_progress and n_replicas <= 4
+        
         for replica_id in range(n_replicas):
             args = {
                 'spin_system_data': self._serialize_spin_system(),
@@ -86,7 +93,8 @@ class ParallelMonteCarlo:
                 'equilibration_steps': equilibration_steps,
                 'sampling_interval': sampling_interval,
                 'random_seed': replica_id * 12345,  # Unique seed per replica
-                'replica_id': replica_id
+                'replica_id': replica_id,
+                'show_individual_progress': show_individual
             }
             replica_args.append(args)
         
@@ -312,11 +320,14 @@ def _run_single_replica(args: Dict[str, Any]) -> Dict[str, Any]:
             use_fast=True
         )
         
+        # Show individual progress bars when there are few replicas
+        show_individual_progress = args.get('show_individual_progress', False)
+        
         result = mc.run(
             n_steps=args['n_steps'],
             equilibration_steps=args['equilibration_steps'],
             sampling_interval=args['sampling_interval'],
-            verbose=False  # No progress bar for individual replicas
+            verbose=show_individual_progress
         )
         
         # Add replica metadata

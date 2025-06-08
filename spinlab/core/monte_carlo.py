@@ -176,14 +176,17 @@ class MonteCarlo:
         }
         
         # Compile results
+        final_acceptance_rate = self.accepted_moves / (self.step_count * self.spin_system.n_spins)
         results = {
             'energies': np.array(self.energy_history),
             'magnetizations': np.array(self.magnetization_history),
             'acceptance_rates': np.array(self.acceptance_history),
             'final_energy': self.current_energy,
             'final_magnetization': self.spin_system.calculate_magnetization(),
-            'total_acceptance_rate': self.accepted_moves / (self.step_count * self.spin_system.n_spins),
+            'acceptance_rate': final_acceptance_rate,  # For parallel MC compatibility
+            'total_acceptance_rate': final_acceptance_rate,  # Keep backward compatibility
             'n_samples': sampling_count,
+            'n_steps': n_steps,  # Add for parallel MC compatibility
             'timing': self.timing_info
         }
         
