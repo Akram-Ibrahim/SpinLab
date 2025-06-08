@@ -36,7 +36,7 @@ class OptimizationMethod(ABC):
 
 class LBFGS(OptimizationMethod):
     """
-    Limited-memory BFGS optimization for spin systems.
+    Limited-memory BFGS optimization using scipy.optimize.
     
     Uses spherical coordinates to handle the constraint that spins
     have fixed magnitude.
@@ -51,67 +51,49 @@ class LBFGS(OptimizationMethod):
         verbose: bool = True,
         **kwargs
     ) -> Dict[str, Any]:
-        """Optimize using L-BFGS."""
+        """Optimize using scipy L-BFGS-B."""
         # Convert to spherical coordinates for unconstrained optimization
         initial_angles = self._cartesian_to_spherical(initial_config)
         
-        # Setup optimization
-        result_dict = {
+        # Setup optimization tracking
+        self._optimization_data = {
             'energies': [],
             'configurations': [],
-            'gradients': []
+            'iteration_count': 0
         }
         
-        def objective(angles_flat):
-            """Objective function in spherical coordinates."""
+        def objective_and_gradient(angles_flat):
+            """Combined objective and gradient function."""
             angles = angles_flat.reshape(-1, 2)
             config = self._spherical_to_cartesian(angles)
+            
+            # Calculate energy and gradient
             energy = self.optimizer.objective_function(config)
-            
-            result_dict['energies'].append(energy)
-            result_dict['configurations'].append(config.copy())
-            
-            return energy
-        
-        def gradient_func(angles_flat):
-            """Gradient in spherical coordinates."""
-            angles = angles_flat.reshape(-1, 2)
-            config = self._spherical_to_cartesian(angles)
-            
-            # Get Cartesian gradient (torques)
             cart_grad = self.optimizer.gradient(config)
-            
-            # Transform to spherical coordinate gradient
             sph_grad = self._transform_gradient_to_spherical(config, cart_grad, angles)
             
-            result_dict['gradients'].append(sph_grad.copy())
+            # Store data
+            self._optimization_data['energies'].append(energy)
+            self._optimization_data['configurations'].append(config.copy())
+            self._optimization_data['iteration_count'] += 1
             
-            return sph_grad.flatten()
-        
-        # Setup callback
-        iteration_count = [0]
-        
-        def scipy_callback(xk):
-            """Callback for scipy.optimize."""
-            iteration_count[0] += 1
+            if verbose and self._optimization_data['iteration_count'] % 10 == 0:
+                print(f"Iteration {self._optimization_data['iteration_count']}: E = {energy:.6f} eV")
+            
+            # Call user callback
             if callback is not None:
-                angles = xk.reshape(-1, 2)
-                config = self._spherical_to_cartesian(angles)
-                callback(self.optimizer, iteration_count[0], config)
+                callback(self.optimizer, self._optimization_data['iteration_count'], config)
             
-            if verbose and iteration_count[0] % 10 == 0:
-                current_energy = result_dict['energies'][-1] if result_dict['energies'] else 0
-                print(f"Iteration {iteration_count[0]}: E = {current_energy:.6f} eV")
+            return energy, sph_grad.flatten()
         
         # Run optimization
         start_time = time.time()
         
         result = minimize(
-            objective,
+            objective_and_gradient,
             initial_angles.flatten(),
             method='L-BFGS-B',
-            jac=gradient_func,
-            callback=scipy_callback,
+            jac=True,  # Gradient provided by objective function
             options={
                 'maxiter': max_iterations,
                 'ftol': tolerance,
@@ -129,79 +111,56 @@ class LBFGS(OptimizationMethod):
             'converged': result.success,
             'final_configuration': final_config,
             'final_energy': result.fun,
-            'iterations': iteration_count[0],
+            'iterations': self._optimization_data['iteration_count'],
             'function_evaluations': result.nfev,
-            'gradient_evaluations': result.njev,
             'optimization_time': optimization_time,
             'message': result.message,
-            'energy_history': np.array(result_dict['energies']),
-            'configuration_history': result_dict['configurations']
+            'energy_history': np.array(self._optimization_data['energies']),
+            'configuration_history': self._optimization_data['configurations']
         }
     
     def _cartesian_to_spherical(self, config: np.ndarray) -> np.ndarray:
         """Convert Cartesian coordinates to spherical angles."""
         x, y, z = config[:, 0], config[:, 1], config[:, 2]
-        
-        # Calculate theta and phi
-        r = np.sqrt(x**2 + y**2 + z**2)
-        theta = np.arccos(z / r)  # Polar angle [0, π]
+        r = np.linalg.norm(config, axis=1)
+        theta = np.arccos(np.clip(z / r, -1, 1))  # Polar angle [0, π]
         phi = np.arctan2(y, x)    # Azimuthal angle [-π, π]
-        
         return np.column_stack((theta, phi))
     
     def _spherical_to_cartesian(self, angles: np.ndarray) -> np.ndarray:
         """Convert spherical angles to Cartesian coordinates."""
         theta, phi = angles[:, 0], angles[:, 1]
-        
-        x = self.optimizer.spin_system.spin_magnitude * np.sin(theta) * np.cos(phi)
-        y = self.optimizer.spin_system.spin_magnitude * np.sin(theta) * np.sin(phi)
-        z = self.optimizer.spin_system.spin_magnitude * np.cos(theta)
-        
+        S = self.optimizer.spin_system.spin_magnitude
+        x = S * np.sin(theta) * np.cos(phi)
+        y = S * np.sin(theta) * np.sin(phi)
+        z = S * np.cos(theta)
         return np.column_stack((x, y, z))
     
-    def _transform_gradient_to_spherical(
-        self, 
-        config: np.ndarray, 
-        cart_grad: np.ndarray, 
-        angles: np.ndarray
-    ) -> np.ndarray:
+    def _transform_gradient_to_spherical(self, config: np.ndarray, cart_grad: np.ndarray, angles: np.ndarray) -> np.ndarray:
         """Transform Cartesian gradient to spherical coordinate gradient."""
         theta, phi = angles[:, 0], angles[:, 1]
-        
-        # Transformation matrix elements
-        sin_theta = np.sin(theta)
-        cos_theta = np.cos(theta)
-        sin_phi = np.sin(phi)
-        cos_phi = np.cos(phi)
-        
-        # Partial derivatives of Cartesian coordinates w.r.t. spherical
         S = self.optimizer.spin_system.spin_magnitude
         
-        # dx/dtheta, dx/dphi, etc.
-        dx_dtheta = S * cos_theta * cos_phi
-        dx_dphi = -S * sin_theta * sin_phi
+        # Jacobian transformation
+        sin_theta, cos_theta = np.sin(theta), np.cos(theta)
+        sin_phi, cos_phi = np.sin(phi), np.cos(phi)
         
-        dy_dtheta = S * cos_theta * sin_phi
-        dy_dphi = S * sin_theta * cos_phi
+        # Gradient transformation
+        grad_theta = S * (cart_grad[:, 0] * cos_theta * cos_phi + 
+                         cart_grad[:, 1] * cos_theta * sin_phi - 
+                         cart_grad[:, 2] * sin_theta)
         
-        dz_dtheta = -S * sin_theta
-        dz_dphi = 0
-        
-        # Transform gradient
-        grad_theta = (cart_grad[:, 0] * dx_dtheta + 
-                     cart_grad[:, 1] * dy_dtheta + 
-                     cart_grad[:, 2] * dz_dtheta)
-        
-        grad_phi = (cart_grad[:, 0] * dx_dphi + 
-                   cart_grad[:, 1] * dy_dphi + 
-                   cart_grad[:, 2] * dz_dphi)
+        grad_phi = S * sin_theta * (-cart_grad[:, 0] * sin_phi + 
+                                   cart_grad[:, 1] * cos_phi)
         
         return np.column_stack((grad_theta, grad_phi))
 
 
 class ConjugateGradient(OptimizationMethod):
     """
-    Conjugate gradient optimization for spin systems.
+    Conjugate gradient optimization using scipy.optimize.
+    
+    Uses spherical coordinates to handle spin magnitude constraints.
     """
     
     def optimize(
@@ -211,107 +170,110 @@ class ConjugateGradient(OptimizationMethod):
         tolerance: float,
         callback: Optional[Callable] = None,
         verbose: bool = True,
-        restart_interval: int = 50,
         **kwargs
     ) -> Dict[str, Any]:
-        """Optimize using conjugate gradient method."""
+        """Optimize using scipy CG method."""
+        # Convert to spherical coordinates for unconstrained optimization
+        initial_angles = self._cartesian_to_spherical(initial_config)
         
-        config = initial_config.copy()
-        energy = self.optimizer.objective_function(config)
+        # Setup optimization tracking
+        self._optimization_data = {
+            'energies': [],
+            'configurations': [],
+            'iteration_count': 0
+        }
         
-        # Initial gradient (torque)
-        gradient = self.optimizer.gradient(config)
-        search_direction = -gradient.copy()  # Initial search direction
-        
-        energies = [energy]
-        configurations = [config.copy()]
-        
-        if verbose:
-            pbar = tqdm(total=max_iterations, desc="CG Optimization")
-        
-        for iteration in range(max_iterations):
-            # Line search along search direction
-            alpha = self._line_search(config, search_direction)
+        def objective_and_gradient(angles_flat):
+            """Combined objective and gradient function."""
+            angles = angles_flat.reshape(-1, 2)
+            config = self._spherical_to_cartesian(angles)
             
-            # Update configuration
-            new_config = config + alpha * search_direction
+            # Calculate energy and gradient
+            energy = self.optimizer.objective_function(config)
+            cart_grad = self.optimizer.gradient(config)
+            sph_grad = self._transform_gradient_to_spherical(config, cart_grad, angles)
             
-            # Normalize spins
-            new_config = self._normalize_spins(new_config)
+            # Store data
+            self._optimization_data['energies'].append(energy)
+            self._optimization_data['configurations'].append(config.copy())
+            self._optimization_data['iteration_count'] += 1
             
-            # Calculate new energy and gradient
-            new_energy = self.optimizer.objective_function(new_config)
-            new_gradient = self.optimizer.gradient(new_config)
+            if verbose and self._optimization_data['iteration_count'] % 10 == 0:
+                print(f"Iteration {self._optimization_data['iteration_count']}: E = {energy:.6f} eV")
             
-            # Check convergence
-            if abs(new_energy - energy) < tolerance and np.linalg.norm(new_gradient) < tolerance:
-                if verbose:
-                    print(f"\nConverged at iteration {iteration}")
-                break
-            
-            # Calculate beta for conjugate direction (Polak-Ribière formula)
-            if iteration % restart_interval == 0:
-                # Restart CG
-                beta = 0
-            else:
-                numerator = np.sum(new_gradient * (new_gradient - gradient))
-                denominator = np.sum(gradient * gradient)
-                beta = max(0, numerator / denominator) if denominator > 0 else 0
-            
-            # Update search direction
-            search_direction = -new_gradient + beta * search_direction
-            
-            # Update state
-            config = new_config
-            energy = new_energy
-            gradient = new_gradient
-            
-            energies.append(energy)
-            configurations.append(config.copy())
-            
-            # Callback
+            # Call user callback
             if callback is not None:
-                callback(self.optimizer, iteration, config)
+                callback(self.optimizer, self._optimization_data['iteration_count'], config)
             
-            if verbose:
-                pbar.set_postfix({'Energy': f'{energy:.6f}'})
-                pbar.update(1)
+            return energy, sph_grad.flatten()
         
-        if verbose:
-            pbar.close()
+        # Run optimization
+        start_time = time.time()
+        
+        result = minimize(
+            objective_and_gradient,
+            initial_angles.flatten(),
+            method='CG',
+            jac=True,  # Gradient provided by objective function
+            options={
+                'maxiter': max_iterations,
+                'gtol': tolerance
+            }
+        )
+        
+        optimization_time = time.time() - start_time
+        
+        # Convert final result back to Cartesian
+        final_angles = result.x.reshape(-1, 2)
+        final_config = self._spherical_to_cartesian(final_angles)
         
         return {
-            'converged': iteration < max_iterations - 1,
-            'final_configuration': config,
-            'final_energy': energy,
-            'iterations': iteration + 1,
-            'energy_history': np.array(energies),
-            'configuration_history': configurations
+            'converged': result.success,
+            'final_configuration': final_config,
+            'final_energy': result.fun,
+            'iterations': self._optimization_data['iteration_count'],
+            'function_evaluations': result.nfev,
+            'optimization_time': optimization_time,
+            'message': result.message,
+            'energy_history': np.array(self._optimization_data['energies']),
+            'configuration_history': self._optimization_data['configurations']
         }
     
-    def _line_search(self, config: np.ndarray, direction: np.ndarray) -> float:
-        """Simple line search along given direction."""
-        alpha_values = [0.001, 0.01, 0.1, 0.5, 1.0]
-        best_alpha = 0
-        best_energy = self.optimizer.objective_function(config)
-        
-        for alpha in alpha_values:
-            test_config = config + alpha * direction
-            test_config = self._normalize_spins(test_config)
-            test_energy = self.optimizer.objective_function(test_config)
-            
-            if test_energy < best_energy:
-                best_energy = test_energy
-                best_alpha = alpha
-        
-        return best_alpha
+    def _cartesian_to_spherical(self, config: np.ndarray) -> np.ndarray:
+        """Convert Cartesian coordinates to spherical angles."""
+        x, y, z = config[:, 0], config[:, 1], config[:, 2]
+        r = np.linalg.norm(config, axis=1)
+        theta = np.arccos(np.clip(z / r, -1, 1))  # Polar angle [0, π]
+        phi = np.arctan2(y, x)    # Azimuthal angle [-π, π]
+        return np.column_stack((theta, phi))
     
-    def _normalize_spins(self, spins: np.ndarray) -> np.ndarray:
-        """Normalize spins to maintain magnitude."""
-        magnitudes = np.linalg.norm(spins, axis=1, keepdims=True)
-        magnitudes = np.where(magnitudes > 0, magnitudes, 1.0)
-        normalized = spins / magnitudes
-        return normalized * self.optimizer.spin_system.spin_magnitude
+    def _spherical_to_cartesian(self, angles: np.ndarray) -> np.ndarray:
+        """Convert spherical angles to Cartesian coordinates."""
+        theta, phi = angles[:, 0], angles[:, 1]
+        S = self.optimizer.spin_system.spin_magnitude
+        x = S * np.sin(theta) * np.cos(phi)
+        y = S * np.sin(theta) * np.sin(phi)
+        z = S * np.cos(theta)
+        return np.column_stack((x, y, z))
+    
+    def _transform_gradient_to_spherical(self, config: np.ndarray, cart_grad: np.ndarray, angles: np.ndarray) -> np.ndarray:
+        """Transform Cartesian gradient to spherical coordinate gradient."""
+        theta, phi = angles[:, 0], angles[:, 1]
+        S = self.optimizer.spin_system.spin_magnitude
+        
+        # Jacobian transformation
+        sin_theta, cos_theta = np.sin(theta), np.cos(theta)
+        sin_phi, cos_phi = np.sin(phi), np.cos(phi)
+        
+        # Gradient transformation
+        grad_theta = S * (cart_grad[:, 0] * cos_theta * cos_phi + 
+                         cart_grad[:, 1] * cos_theta * sin_phi - 
+                         cart_grad[:, 2] * sin_theta)
+        
+        grad_phi = S * sin_theta * (-cart_grad[:, 0] * sin_phi + 
+                                   cart_grad[:, 1] * cos_phi)
+        
+        return np.column_stack((grad_theta, grad_phi))
 
 
 class SimulatedAnnealing(OptimizationMethod):

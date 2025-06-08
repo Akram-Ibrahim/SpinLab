@@ -7,10 +7,10 @@ A comprehensive Python package for spin simulations and magnetic analysis, suppo
 - **High Performance**: Numba JIT compilation provides 10-100x speedup over pure NumPy
 - **Monte Carlo Simulations**: Metropolis-Hastings algorithm with parallel tempering support
 - **LLG Spin Dynamics**: Multiple integration schemes for time evolution
-- **Ground State Optimization**: Various algorithms (L-BFGS, conjugate gradient, simulated annealing, genetic algorithms)
+- **Ground State Optimization**: Various algorithms (L-BFGS, conjugate gradient, simulated annealing)
 - **Thermodynamic Analysis**: Phase transitions, critical phenomena, finite-size scaling
 - **Flexible Hamiltonians**: Support for exchange, anisotropy, DMI, Zeeman, and custom terms
-- **Multiple Magnetic Models**: Ising, XY, and Heisenberg models
+- **Multiple Magnetic Models**: Ising, XY, and 3D models
 - **ASE Integration**: Compatible with Atomic Simulation Environment
 - **Modern Architecture**: Clean, modular design with comprehensive documentation
 
@@ -72,7 +72,7 @@ hamiltonian = Hamiltonian()
 hamiltonian.add_exchange(J=-0.01, neighbor_shell="shell_1")  # Ferromagnetic
 
 # Create spin system (use_fast=True by default for automatic acceleration)
-spin_system = SpinSystem(structure, hamiltonian, magnetic_model="heisenberg")
+spin_system = SpinSystem(structure, hamiltonian, magnetic_model="3d")
 spin_system.get_neighbors([3.0])  # Find neighbors within 3 Å
 
 # Initialize random configuration
@@ -332,13 +332,84 @@ from spinlab.utils.performance import benchmark_numba_speedup
 benchmark_results = benchmark_numba_speedup(system_sizes=[10, 20, 30])
 ```
 
+## Simulation Methods Comparison
+
+SpinLab provides multiple simulation and optimization methods, each suited for different research objectives:
+
+| Method | Type | Purpose |
+|--------|------|---------|
+| **Monte Carlo** | Statistical | Equilibrium properties, thermal sampling |
+| **LLG Dynamics** | Deterministic | Real-time evolution, magnetization dynamics |
+| **LBFGS** | Local optimization | Ground state refinement |
+| **Conjugate Gradient** | Local optimization | Ground state refinement |
+| **Simulated Annealing** | Global optimization | Ground state search |
+
+### Method Selection Guide
+
+#### **Monte Carlo (MC)**
+```python
+mc = MonteCarlo(spin_system, temperature=300.0)
+results = mc.run(n_steps=10000)
+```
+- **Use for**: Finite temperature properties, phase diagrams, critical phenomena
+- **Advantages**: Natural thermal sampling, handles frustration well, scales to large systems
+- **Limitations**: Statistical convergence can be slow, difficulty with glassy states
+- **Output**: Energy, magnetization, heat capacity, susceptibility
+
+#### **LLG Spin Dynamics**
+```python
+llg = LLGSolver(spin_system, damping=0.01)
+results = llg.run(total_time=1e-9, dt=1e-15)
+```
+- **Use for**: Magnetization switching, domain wall motion, spin wave excitations
+- **Advantages**: Real-time evolution, includes precessional dynamics, can include noise
+- **Limitations**: Requires small timesteps, computational cost scales with dynamics time
+- **Output**: Time-resolved trajectories, relaxation times, frequency spectra
+
+#### **Local Optimization (LBFGS/CG)**
+```python
+optimizer = SpinOptimizer(spin_system, method="lbfgs")  # or "cg"
+results = optimizer.optimize(tolerance=1e-8)
+```
+- **Use for**: Finding exact ground states, transition state refinement
+- **Advantages**: Fast convergence, high precision, reliable for smooth landscapes
+- **Limitations**: Can get trapped in local minima, requires good initial guess
+- **Output**: Precise energy minima, optimized configurations
+
+#### **Global Optimization (Simulated Annealing)**
+```python
+optimizer = SpinOptimizer(spin_system, method="sa")
+results = optimizer.find_ground_state(n_attempts=10)
+```
+- **Use for**: Finding global ground states, exploring metastable states
+- **Advantages**: Escapes local minima, explores configuration space broadly
+- **Limitations**: Slower convergence, requires careful temperature scheduling
+- **Output**: Global minimum candidates, energy landscape exploration
+
+### Workflow Recommendations
+
+#### **For Phase Transition Studies**
+1. Use **Monte Carlo** at multiple temperatures
+2. Apply **Thermodynamic Analysis** for critical behavior
+3. Validate with **LLG dynamics** near transition
+
+#### **For Ground State Studies**
+1. Start with **Simulated Annealing** for global search
+2. Refine with **LBFGS** for high precision
+3. Verify stability with **LLG dynamics**
+
+#### **For Dynamic Properties**
+1. Find equilibrium with **Monte Carlo** or **optimization**
+2. Apply perturbation and use **LLG dynamics**
+3. Analyze frequency response and relaxation
+
 ## Examples
 
 See the `examples/` directory for complete examples including:
 
 - Magnetic phase transitions in 2D Ising model
 - Skyrmion dynamics in chiral magnets
-- Critical behavior in Heisenberg systems
+- Critical behavior in 3D magnetic systems
 - Finite-size scaling analysis
 - Custom Hamiltonian implementations
 - **Numba performance demonstrations**
