@@ -13,8 +13,10 @@ from . import core
 from . import dynamics
 from . import optimization
 from . import analysis
-from . import io
 from . import utils
+
+# Import io module with alias to avoid conflict with built-in io
+from . import io as spinlab_io
 
 from .core import SpinSystem, MonteCarlo
 from .dynamics import LLGSolver
@@ -39,6 +41,6 @@ __all__ = [
     "dynamics",
     "optimization", 
     "analysis",
-    "io",
+    "spinlab_io",
     "utils"
 ]

@@ -22,6 +22,19 @@ def main():
     print("🧪 SpinLab Installation Test")
     print("=" * 40)
     
+    # Test dependencies first
+    print("\n🔬 Core Dependencies:")
+    deps_ok = True
+    deps_ok &= test_import('numpy')
+    deps_ok &= test_import('scipy')
+    deps_ok &= test_import('matplotlib')
+    deps_ok &= test_import('ase')
+    
+    if not deps_ok:
+        print("\n⚠️  Missing core dependencies. Install them first:")
+        print("   pip install numpy scipy matplotlib ase")
+        return
+    
     # Test core SpinLab
     print("\n📦 Core SpinLab:")
     if test_import('spinlab'):
