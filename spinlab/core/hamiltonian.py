@@ -10,7 +10,7 @@ from .fast_ops import (
     exchange_energy, single_ion_anisotropy_energy, 
     magnetic_field_energy, dmi_energy, exchange_effective_field, 
     local_site_energy, local_energy_change,
-    metropolis_step, monte_carlo_sweep_full,
+    metropolis_single_flip, monte_carlo_sweep,
     HAS_NUMBA
 )
 

@@ -300,130 +300,8 @@ def normalize_spins(spins, target_magnitude):
     return normalized
 
 
-@njit(fastmath=True)
-def metropolis_single_flip(
-    spins, 
-    neighbor_array, 
-    orientations, 
-    site_idx, 
-    J, 
-    temperature,
-    spin_magnitude
-):
-    """
-    Fast single spin flip attempt using Metropolis criterion.
-    
-    Args:
-        spins: (n_spins, 3) spin configuration
-        neighbor_array: (n_spins, max_neighbors) neighbor indices
-        orientations: (n_orientations, 2) allowed (theta, phi) orientations in radians
-        site_idx: Index of spin to flip
-        J: Exchange coupling
-        temperature: Temperature in Kelvin
-        spin_magnitude: Magnitude of spins
-        
-    Returns:
-        (accepted, energy_change) tuple
-    """
-    # Store original spin
-    orig_spin = np.array([spins[site_idx, 0], spins[site_idx, 1], spins[site_idx, 2]])
-    
-    # Calculate original energy contribution
-    orig_energy = 0.0
-    max_neighbors = neighbor_array.shape[1]
-    
-    for j_idx in range(max_neighbors):
-        j = neighbor_array[site_idx, j_idx]
-        if j >= 0 and j < spins.shape[0]:
-            dot_product = (orig_spin[0] * spins[j, 0] + 
-                         orig_spin[1] * spins[j, 1] + 
-                         orig_spin[2] * spins[j, 2])
-            orig_energy += -J * dot_product
-    
-    # Propose new orientation
-    orientation_idx = np.random.randint(0, orientations.shape[0])
-    theta = orientations[orientation_idx, 0]
-    phi = orientations[orientation_idx, 1]
-    
-    # Convert to Cartesian
-    new_spin = np.array([
-        spin_magnitude * np.sin(theta) * np.cos(phi),
-        spin_magnitude * np.sin(theta) * np.sin(phi),
-        spin_magnitude * np.cos(theta)
-    ])
-    
-    # Calculate new energy contribution
-    new_energy = 0.0
-    for j_idx in range(max_neighbors):
-        j = neighbor_array[site_idx, j_idx]
-        if j >= 0 and j < spins.shape[0]:
-            dot_product = (new_spin[0] * spins[j, 0] + 
-                         new_spin[1] * spins[j, 1] + 
-                         new_spin[2] * spins[j, 2])
-            new_energy += -J * dot_product
-    
-    # Energy change
-    delta_energy = new_energy - orig_energy
-    
-    # Metropolis criterion
-    if delta_energy <= 0 or np.random.random() < np.exp(-delta_energy / (KB_EV_K * temperature)):
-        # Accept move
-        spins[site_idx, 0] = new_spin[0]
-        spins[site_idx, 1] = new_spin[1]
-        spins[site_idx, 2] = new_spin[2]
-        return True, delta_energy
-    else:
-        # Reject move - spins array unchanged
-        return False, 0.0
 
 
-@njit(parallel=True, fastmath=True)
-def monte_carlo_sweep(
-    spins, 
-    neighbor_array, 
-    orientations, 
-    J, 
-    temperature,
-    spin_magnitude,
-    random_order=True
-):
-    """
-    Fast Monte Carlo sweep over all spins.
-    
-    Args:
-        spins: (n_spins, 3) spin configuration
-        neighbor_array: (n_spins, max_neighbors) neighbor indices  
-        orientations: (n_orientations, 2) allowed orientations
-        J: Exchange coupling
-        temperature: Temperature in Kelvin
-        spin_magnitude: Magnitude of spins
-        random_order: Whether to randomize spin update order
-        
-    Returns:
-        (n_accepted, total_energy_change) tuple
-    """
-    n_spins = spins.shape[0]
-    n_accepted = 0
-    total_delta_energy = 0.0
-    
-    # Create update order
-    if random_order:
-        indices = np.random.permutation(n_spins)
-    else:
-        indices = np.arange(n_spins)
-    
-    for i in range(n_spins):
-        site_idx = indices[i]
-        accepted, delta_energy = metropolis_single_flip(
-            spins, neighbor_array, orientations, site_idx, 
-            J, temperature, spin_magnitude
-        )
-        
-        if accepted:
-            n_accepted += 1
-            total_delta_energy += delta_energy
-    
-    return n_accepted, total_delta_energy
 
 
 @njit(parallel=True, fastmath=True)
@@ -532,15 +410,11 @@ def get_numba_operations():
         'llg_rhs': llg_rhs,
         'normalize_spins': normalize_spins,
         
-        # Monte Carlo (legacy - exchange only)
-        'metropolis_single_flip': metropolis_single_flip,
-        'monte_carlo_sweep': monte_carlo_sweep,
-        
-        # Monte Carlo (full Hamiltonian)
+        # Monte Carlo (complete Hamiltonian)
         'local_site_energy': local_site_energy,
         'local_energy_change': local_energy_change,
-        'metropolis_step': metropolis_step,
-        'monte_carlo_sweep_full': monte_carlo_sweep_full,
+        'metropolis_single_flip': metropolis_single_flip,
+        'monte_carlo_sweep': monte_carlo_sweep,
         
         # Analysis
         'calculate_magnetization': calculate_magnetization,
@@ -779,7 +653,7 @@ def local_energy_change(
 
 
 @njit(fastmath=True)
-def metropolis_step(
+def metropolis_single_flip(
     spins,
     neighbor_array,
     orientations,
@@ -806,9 +680,9 @@ def metropolis_step(
     include_magnetic_field
 ):
     """
-    Fast single spin flip with FULL Hamiltonian using Metropolis criterion.
+    Single spin flip with complete Hamiltonian using Metropolis criterion.
     
-    This replaces the old fast_metropolis_single_flip with complete physics.
+    Includes all interaction types: exchange, Kitaev, DMI, anisotropy, fields.
     
     Returns:
         (accepted, energy_change) tuple
@@ -846,7 +720,7 @@ def metropolis_step(
 
 
 @njit(parallel=True, fastmath=True)
-def monte_carlo_sweep_full(
+def monte_carlo_sweep(
     spins,
     neighbor_array,
     orientations,
@@ -869,9 +743,9 @@ def monte_carlo_sweep_full(
     random_order=True
 ):
     """
-    Fast Monte Carlo sweep with FULL Hamiltonian.
+    Monte Carlo sweep over all spins with complete Hamiltonian.
     
-    This replaces the old fast_mc_sweep with complete physics.
+    Includes all interaction types: exchange, Kitaev, DMI, anisotropy, fields.
     
     Returns:
         (n_accepted, total_energy_change) tuple
@@ -888,7 +762,7 @@ def monte_carlo_sweep_full(
     
     for i in range(n_spins):
         site_idx = indices[i]
-        accepted, delta_energy = metropolis_step(
+        accepted, delta_energy = metropolis_single_flip(
             spins, neighbor_array, orientations, site_idx, temperature, spin_magnitude,
             J_exchange, K_kitaev_x, K_kitaev_y, K_kitaev_z, include_kitaev,
             D_dmi_vector, include_dmi, K_anisotropy, anisotropy_axis, include_anisotropy,
