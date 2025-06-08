@@ -10,6 +10,7 @@ __author__ = "Akram Ibrahim"
 __email__ = "akram.ibrahim@example.com"
 
 from . import core
+from . import monte_carlo
 from . import dynamics
 from . import optimization
 from . import analysis
@@ -17,8 +18,9 @@ from . import utils
 
 # Note: IO functionality is available in utils.io module
 
-from .core import SpinSystem, MonteCarlo, ParallelMonteCarlo
+from .core import SpinSystem
 from .core.hamiltonian import Hamiltonian, KitaevTerm
+from .monte_carlo import MonteCarlo, ParallelMonteCarlo
 from .dynamics import LLGSolver
 from .optimization import SpinOptimizer
 from .analysis import ThermodynamicsAnalyzer
@@ -48,6 +50,7 @@ __all__ = [
     "run_performance_test",
     "benchmark_numba_speedup",
     "core",
+    "monte_carlo",
     "dynamics",
     "optimization", 
     "analysis",

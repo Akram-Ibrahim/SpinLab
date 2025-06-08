@@ -7,9 +7,9 @@ from typing import Optional, Dict, List, Callable, Tuple, Any
 import time
 from tqdm import tqdm
 
-from .spin_system import SpinSystem
+from ..core.spin_system import SpinSystem
 from ..utils.random import set_random_seed
-from .fast_ops import (
+from ..core.fast_ops import (
     monte_carlo_sweep, metropolis_single_flip, 
     calculate_magnetization, HAS_NUMBA
 )

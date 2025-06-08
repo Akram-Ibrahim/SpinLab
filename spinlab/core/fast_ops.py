@@ -498,7 +498,7 @@ def local_site_energy(
     D_dmi_vector,
     include_dmi,
     # Single-ion anisotropy
-    K_anisotropy,
+    A_anisotropy,
     anisotropy_axis,
     include_anisotropy,
     # Magnetic field
@@ -521,7 +521,7 @@ def local_site_energy(
         include_kitaev: Whether to include Kitaev terms
         D_dmi_vector: (3,) DMI vector
         include_dmi: Whether to include DMI
-        K_anisotropy: Single-ion anisotropy constant
+        A_anisotropy: Single-ion anisotropy constant
         anisotropy_axis: (3,) easy axis for anisotropy
         include_anisotropy: Whether to include anisotropy
         magnetic_field: (3,) magnetic field vector (Tesla)
@@ -577,13 +577,13 @@ def local_site_energy(
                 energy += dot_product
     
     # =================================================================
-    # SINGLE-ION ANISOTROPY: -K (s_i · axis)²
+    # SINGLE-ION ANISOTROPY: -A (s_i · axis)²
     # =================================================================
-    if include_anisotropy and K_anisotropy != 0.0:
+    if include_anisotropy and A_anisotropy != 0.0:
         dot_axis = (site_spin_vector[0] * anisotropy_axis[0] + 
                    site_spin_vector[1] * anisotropy_axis[1] + 
                    site_spin_vector[2] * anisotropy_axis[2])
-        energy += -K_anisotropy * dot_axis * dot_axis
+        energy += -A_anisotropy * dot_axis * dot_axis
     
     # =================================================================
     # MAGNETIC FIELD: -g μ_B B · s_i
@@ -614,7 +614,7 @@ def local_energy_change(
     D_dmi_vector,
     include_dmi,
     # Single-ion anisotropy
-    K_anisotropy,
+    A_anisotropy,
     anisotropy_axis,
     include_anisotropy,
     # Magnetic field
@@ -637,7 +637,7 @@ def local_energy_change(
     E_old = local_site_energy(
         spins, site_idx, orig_spin, neighbor_array,
         J_exchange, K_kitaev_x, K_kitaev_y, K_kitaev_z, include_kitaev,
-        D_dmi_vector, include_dmi, K_anisotropy, anisotropy_axis, include_anisotropy,
+        D_dmi_vector, include_dmi, A_anisotropy, anisotropy_axis, include_anisotropy,
         magnetic_field, g_factor, include_magnetic_field
     )
     
@@ -645,7 +645,7 @@ def local_energy_change(
     E_new = local_site_energy(
         spins, site_idx, new_spin_vector, neighbor_array,
         J_exchange, K_kitaev_x, K_kitaev_y, K_kitaev_z, include_kitaev,
-        D_dmi_vector, include_dmi, K_anisotropy, anisotropy_axis, include_anisotropy,
+        D_dmi_vector, include_dmi, A_anisotropy, anisotropy_axis, include_anisotropy,
         magnetic_field, g_factor, include_magnetic_field
     )
     
@@ -671,7 +671,7 @@ def metropolis_single_flip(
     D_dmi_vector,
     include_dmi,
     # Single-ion anisotropy
-    K_anisotropy,
+    A_anisotropy,
     anisotropy_axis,
     include_anisotropy,
     # Magnetic field
@@ -703,7 +703,7 @@ def metropolis_single_flip(
     delta_energy = local_energy_change(
         spins, site_idx, new_spin, neighbor_array,
         J_exchange, K_kitaev_x, K_kitaev_y, K_kitaev_z, include_kitaev,
-        D_dmi_vector, include_dmi, K_anisotropy, anisotropy_axis, include_anisotropy,
+        D_dmi_vector, include_dmi, A_anisotropy, anisotropy_axis, include_anisotropy,
         magnetic_field, g_factor, include_magnetic_field
     )
     
@@ -734,7 +734,7 @@ def monte_carlo_sweep(
     include_kitaev,
     D_dmi_vector,
     include_dmi,
-    K_anisotropy,
+    A_anisotropy,
     anisotropy_axis,
     include_anisotropy,
     magnetic_field,
@@ -765,7 +765,7 @@ def monte_carlo_sweep(
         accepted, delta_energy = metropolis_single_flip(
             spins, neighbor_array, orientations, site_idx, temperature, spin_magnitude,
             J_exchange, K_kitaev_x, K_kitaev_y, K_kitaev_z, include_kitaev,
-            D_dmi_vector, include_dmi, K_anisotropy, anisotropy_axis, include_anisotropy,
+            D_dmi_vector, include_dmi, A_anisotropy, anisotropy_axis, include_anisotropy,
             magnetic_field, g_factor, include_magnetic_field
         )
         

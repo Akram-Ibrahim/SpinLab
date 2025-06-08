@@ -9,7 +9,7 @@ from ase.build import bulk
 
 from ..core.spin_system import SpinSystem
 from ..core.hamiltonian import Hamiltonian
-from ..core.monte_carlo import MonteCarlo
+from ..monte_carlo import MonteCarlo
 from ..dynamics.llg_solver import LLGSolver
 from ..core.fast_ops import check_numba_availability, HAS_NUMBA
 

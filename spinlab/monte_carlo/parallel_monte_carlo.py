@@ -9,7 +9,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 
-from .spin_system import SpinSystem
+from ..core.spin_system import SpinSystem
 from .monte_carlo import MonteCarlo
 from ..utils.random import set_random_seed
 
