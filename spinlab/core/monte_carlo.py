@@ -10,8 +10,8 @@ from tqdm import tqdm
 from .spin_system import SpinSystem
 from ..utils.random import set_random_seed
 from .fast_ops import (
-    fast_mc_sweep, fast_metropolis_single_flip, 
-    fast_calculate_magnetization, HAS_NUMBA
+    monte_carlo_sweep, metropolis_single_flip, 
+    calculate_magnetization, HAS_NUMBA
 )
 
 
@@ -204,7 +204,7 @@ class MonteCarlo:
         """
         if self.use_fast and self._neighbor_array is not None and self._orientations_rad is not None:
             # Use fast Numba implementation
-            n_accepted, delta_energy = fast_mc_sweep(
+            n_accepted, delta_energy = monte_carlo_sweep(
                 self.spin_system.spin_config,
                 self._neighbor_array,
                 self._orientations_rad,

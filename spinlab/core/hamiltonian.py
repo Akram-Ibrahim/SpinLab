@@ -7,8 +7,11 @@ from typing import Dict, List, Optional, Union, Callable, Any
 from abc import ABC, abstractmethod
 
 from .fast_ops import (
-    fast_exchange_energy, fast_single_ion_anisotropy_energy, 
-    fast_magnetic_field_energy, fast_dmi_energy, fast_effective_field, HAS_NUMBA
+    exchange_energy, single_ion_anisotropy_energy, 
+    magnetic_field_energy, dmi_energy, exchange_effective_field, 
+    local_site_energy, local_energy_change,
+    metropolis_step, monte_carlo_sweep_full,
+    HAS_NUMBA
 )
 
 
@@ -70,7 +73,7 @@ class ExchangeTerm(HamiltonianTerm):
         
         if self.use_fast:
             # Use fast Numba implementation
-            return fast_exchange_energy(spins, neighbor_array, self.J)
+            return exchange_energy(spins, neighbor_array, self.J)
         else:
             # Fallback NumPy implementation
             # Get neighbor spins
@@ -101,7 +104,7 @@ class ExchangeTerm(HamiltonianTerm):
         
         if self.use_fast:
             # Use fast implementation for all sites, then extract one
-            all_fields = fast_effective_field(spins, neighbor_array, self.J)
+            all_fields = exchange_effective_field(spins, neighbor_array, self.J)
             return all_fields[site_idx]
         else:
             # Fallback implementation
@@ -142,7 +145,7 @@ class SingleIonAnisotropyTerm(HamiltonianTerm):
         """Calculate single-ion anisotropy energy: -K * (Si · axis)^2"""
         if self.use_fast:
             # Use fast Numba implementation
-            return fast_single_ion_anisotropy_energy(spins, self.K, self.axis)
+            return single_ion_anisotropy_energy(spins, self.K, self.axis)
         else:
             # Fallback NumPy implementation
             dot_products = np.dot(spins, self.axis)
@@ -198,7 +201,7 @@ class MagneticFieldTerm(HamiltonianTerm):
         """Calculate magnetic field energy: -μ·B = -g*μB*Si·B"""
         if self.use_fast:
             # Use fast Numba implementation
-            return fast_magnetic_field_energy(spins, self.B_field, self.g_factor)
+            return magnetic_field_energy(spins, self.B_field, self.g_factor)
         else:
             # Fallback NumPy implementation
             factor = -self.g_factor * self.mu_B
@@ -283,7 +286,7 @@ class DMITerm(HamiltonianTerm):
         
         if self.use_fast:
             # Use fast Numba implementation
-            return fast_dmi_energy(spins, neighbor_array, self.D_vector)
+            return dmi_energy(spins, neighbor_array, self.D_vector)
         else:
             # Fallback NumPy implementation
             neighbor_spins = spins[neighbor_array]
