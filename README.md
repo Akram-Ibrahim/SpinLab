@@ -86,6 +86,18 @@ print(f"Final energy: {results['final_energy']:.4f} eV")
 print(f"Final magnetization: {results['final_magnetization']}")
 ```
 
+### Input/Output Operations
+
+```python
+from spinlab.utils.io import save_configuration, load_configuration
+
+# Save spin configuration
+save_configuration('my_spins.npy', spin_system.spins)
+
+# Load configuration
+spins, metadata = load_configuration('my_spins.npy')
+```
+
 ### LLG Spin Dynamics
 
 ```python
