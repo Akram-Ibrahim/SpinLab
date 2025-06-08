@@ -8,7 +8,7 @@ import time
 from tqdm import tqdm
 
 from ..core.spin_system import SpinSystem
-from .methods import ConjugateGradient, LBFGS, SimulatedAnnealing, GeneticOptimizer
+from .methods import ConjugateGradient, LBFGS, SimulatedAnnealing
 
 
 class SpinOptimizer:
@@ -28,7 +28,7 @@ class SpinOptimizer:
         
         Args:
             spin_system: SpinSystem to optimize
-            method: Optimization method ("lbfgs", "cg", "sa", "genetic")
+            method: Optimization method ("lbfgs", "cg", "sa")
             random_seed: Random seed for reproducibility
         """
         self.spin_system = spin_system
@@ -57,8 +57,7 @@ class SpinOptimizer:
         method_map = {
             "lbfgs": LBFGS,
             "cg": ConjugateGradient,
-            "sa": SimulatedAnnealing,
-            "genetic": GeneticOptimizer
+            "sa": SimulatedAnnealing
         }
         
         if method_name not in method_map:
