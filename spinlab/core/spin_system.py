@@ -9,7 +9,7 @@ from ase.build import make_supercell
 
 from .hamiltonian import Hamiltonian
 from .neighbors import NeighborFinder
-from .fast_ops import fast_calculate_magnetization, HAS_NUMBA
+from .fast_ops import calculate_magnetization, HAS_NUMBA
 
 
 class SpinSystem:
@@ -296,7 +296,7 @@ class SpinSystem:
         
         if self.use_fast:
             # Use fast Numba implementation
-            return fast_calculate_magnetization(self._spin_config)
+            return calculate_magnetization(self._spin_config)
         else:
             # Fallback NumPy implementation
             return np.mean(self._spin_config, axis=0)

@@ -10,7 +10,7 @@ from tqdm import tqdm
 from ..core.spin_system import SpinSystem
 from .integrators import HeunIntegrator, RK4Integrator, SemiImplicitIntegrator
 from ..core.fast_ops import (
-    fast_llg_rhs, fast_normalize_spins, fast_effective_field, HAS_NUMBA
+    llg_rhs, normalize_spins, HAS_NUMBA
 )
 
 
@@ -156,7 +156,7 @@ class LLGSolver:
         
         if self.use_fast:
             # Use fast Numba implementation
-            return fast_llg_rhs(spins, H_eff, self.gamma, self.damping)
+            return llg_rhs(spins, H_eff, self.gamma, self.damping)
         else:
             # Fallback NumPy implementation
             # LLG equation: dS/dt = -γ(S × H_eff) + α(S × (S × H_eff))/|S|²
@@ -229,7 +229,7 @@ class LLGSolver:
         """Normalize spins to maintain constant magnitude."""
         if self.use_fast:
             # Use fast Numba implementation
-            return fast_normalize_spins(spins, self.spin_system.spin_magnitude)
+            return normalize_spins(spins, self.spin_system.spin_magnitude)
         else:
             # Fallback NumPy implementation
             magnitudes = np.linalg.norm(spins, axis=1, keepdims=True)
