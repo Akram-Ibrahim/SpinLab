@@ -422,17 +422,24 @@ class Hamiltonian:
     Parameters can come from any source: cluster expansion fitting, DFT, experiments, etc.
     """
     
-    def __init__(self, sublattices: Optional[Dict[str, List[int]]] = None):
+    def __init__(
+        self, 
+        sublattices: Optional[Dict[str, List[int]]] = None,
+        magnetic_species: Optional[List[str]] = None
+    ):
         """
         Initialize Hamiltonian.
         
         Args:
             sublattices: Optional dict mapping sublattice names to site indices
                         e.g., {"A": [0, 2, 4], "B": [1, 3, 5]} for bipartite lattice
+            magnetic_species: Optional list of magnetic species to consider
+                             e.g., ["Fe", "Ni"] - only these atoms will be magnetic
         """
         self.terms: List[HamiltonianTerm] = []
         self.term_names: List[str] = []
         self.sublattices = sublattices or {}
+        self.magnetic_species = magnetic_species
         self._validate_sublattices()
     
     def _validate_sublattices(self):
@@ -452,6 +459,40 @@ class Hamiltonian:
         """Set or update sublattice definitions."""
         self.sublattices = sublattices
         self._validate_sublattices()
+    
+    def filter_magnetic_atoms(self, structure):
+        """
+        Filter structure to keep only magnetic species.
+        
+        Args:
+            structure: ASE Atoms object
+            
+        Returns:
+            Filtered ASE Atoms object with only magnetic species
+            Dictionary mapping original indices to new indices
+        """
+        if self.magnetic_species is None:
+            return structure, {i: i for i in range(len(structure))}
+        
+        # Find magnetic atoms
+        magnetic_indices = []
+        for i, atom in enumerate(structure):
+            if atom.symbol in self.magnetic_species:
+                magnetic_indices.append(i)
+        
+        if not magnetic_indices:
+            raise ValueError(f"No magnetic species {self.magnetic_species} found in structure")
+        
+        # Create filtered structure
+        magnetic_structure = structure[magnetic_indices]
+        
+        # Create index mapping
+        index_map = {old_idx: new_idx for new_idx, old_idx in enumerate(magnetic_indices)}
+        
+        print(f"Filtered structure: {len(structure)} → {len(magnetic_structure)} atoms")
+        print(f"Magnetic species: {self.magnetic_species}")
+        
+        return magnetic_structure, index_map
     
     def add_term(self, term: HamiltonianTerm, name: str):
         """Add a Hamiltonian term."""
