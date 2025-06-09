@@ -63,10 +63,24 @@ class MonteCarlo:
         # Performance tracking
         self.timing_info = {}
         
-        # Pre-compute neighbor array for fast operations
+        # Pre-compute data for fast operations
         self._neighbor_array = None
-        self._J_effective = None
         self._orientations_rad = None
+        
+        # Hamiltonian parameters for fast operations
+        self._J_exchange = None
+        self._K_kitaev_x = None
+        self._K_kitaev_y = None
+        self._K_kitaev_z = None
+        self._include_kitaev = None
+        self._D_dmi_vector = None
+        self._include_dmi = None
+        self._A_anisotropy = None
+        self._anisotropy_axis = None
+        self._include_anisotropy = None
+        self._magnetic_field = None
+        self._g_factor = None
+        self._include_magnetic_field = None
     
     def _prepare_fast_operations(self, orientations: np.ndarray):
         """Prepare data structures for fast Numba operations."""
@@ -81,18 +95,65 @@ class MonteCarlo:
             # Use a default neighbors array if not available
             self._neighbor_array = np.full((self.spin_system.n_spins, 6), -1, dtype=np.int64)
         
-        # Extract effective exchange coupling (simplified for now)
-        # In a full implementation, this would handle multiple exchange terms
-        self._J_effective = -0.01  # Default value
-        
-        # Get Hamiltonian terms and extract exchange
-        for term in self.spin_system.hamiltonian.terms:
-            if hasattr(term, 'J'):
-                self._J_effective = term.J
-                break
+        # Extract Hamiltonian parameters
+        self._extract_hamiltonian_parameters()
         
         # Convert orientations to radians
         self._orientations_rad = np.radians(orientations)
+    
+    def _extract_hamiltonian_parameters(self):
+        """Extract all Hamiltonian parameters for fast operations."""
+        # Default values
+        self._J_exchange = 0.0
+        self._K_kitaev_x = 0.0
+        self._K_kitaev_y = 0.0
+        self._K_kitaev_z = 0.0
+        self._include_kitaev = False
+        self._D_dmi_vector = np.zeros(3)
+        self._include_dmi = False
+        self._A_anisotropy = 0.0
+        self._anisotropy_axis = np.array([0.0, 0.0, 1.0])
+        self._include_anisotropy = False
+        self._magnetic_field = np.zeros(3)
+        self._g_factor = 2.0
+        self._include_magnetic_field = False
+        
+        # Extract from Hamiltonian terms
+        for term in self.spin_system.hamiltonian.terms:
+            term_name = term.__class__.__name__
+            
+            if hasattr(term, 'J') and 'Exchange' in term_name:
+                self._J_exchange = term.J
+            
+            elif 'Kitaev' in term_name:
+                self._include_kitaev = True
+                if hasattr(term, 'K_x'):
+                    self._K_kitaev_x = term.K_x
+                if hasattr(term, 'K_y'):
+                    self._K_kitaev_y = term.K_y
+                if hasattr(term, 'K_z'):
+                    self._K_kitaev_z = term.K_z
+            
+            elif 'DMI' in term_name or 'Dzyaloshinskii' in term_name:
+                self._include_dmi = True
+                if hasattr(term, 'D_vector'):
+                    self._D_dmi_vector = np.array(term.D_vector)
+            
+            elif 'Anisotropy' in term_name:
+                self._include_anisotropy = True
+                if hasattr(term, 'A'):
+                    self._A_anisotropy = term.A
+                elif hasattr(term, 'K'):
+                    self._A_anisotropy = term.K
+                if hasattr(term, 'axis'):
+                    self._anisotropy_axis = np.array(term.axis)
+            
+            elif 'MagneticField' in term_name or 'Zeeman' in term_name:
+                self._include_magnetic_field = True
+                if hasattr(term, 'B_field'):
+                    self._magnetic_field = np.array(term.B_field)
+                if hasattr(term, 'g_factor'):
+                    self._g_factor = term.g_factor
     
     def run(
         self,
@@ -208,9 +269,22 @@ class MonteCarlo:
                 self.spin_system.spin_config,
                 self._neighbor_array,
                 self._orientations_rad,
-                self._J_effective,
                 self.temperature,
                 self.spin_system.spin_magnitude,
+                # Hamiltonian parameters
+                self._J_exchange,
+                self._K_kitaev_x,
+                self._K_kitaev_y,
+                self._K_kitaev_z,
+                self._include_kitaev,
+                self._D_dmi_vector,
+                self._include_dmi,
+                self._A_anisotropy,
+                self._anisotropy_axis,
+                self._include_anisotropy,
+                self._magnetic_field,
+                self._g_factor,
+                self._include_magnetic_field,
                 random_order=True
             )
             
