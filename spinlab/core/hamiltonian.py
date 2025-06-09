@@ -425,7 +425,7 @@ class Hamiltonian:
     def __init__(
         self, 
         sublattices: Optional[Dict[str, List[int]]] = None,
-        magnetic_species: Optional[List[str]] = None
+        nonmagnetic_species: Optional[List[str]] = None
     ):
         """
         Initialize Hamiltonian.
@@ -433,13 +433,14 @@ class Hamiltonian:
         Args:
             sublattices: Optional dict mapping sublattice names to site indices
                         e.g., {"A": [0, 2, 4], "B": [1, 3, 5]} for bipartite lattice
-            magnetic_species: Optional list of magnetic species to consider
-                             e.g., ["Fe", "Ni"] - only these atoms will be magnetic
+            nonmagnetic_species: Optional list of non-magnetic species to exclude
+                                e.g., ["O", "H"] - these atoms will be removed from structure
+                                None means all atoms are considered magnetic
         """
         self.terms: List[HamiltonianTerm] = []
         self.term_names: List[str] = []
         self.sublattices = sublattices or {}
-        self.magnetic_species = magnetic_species
+        self.nonmagnetic_species = nonmagnetic_species
         self._validate_sublattices()
     
     def _validate_sublattices(self):
@@ -462,26 +463,27 @@ class Hamiltonian:
     
     def filter_magnetic_atoms(self, structure):
         """
-        Filter structure to keep only magnetic species.
+        Filter structure to remove non-magnetic species.
         
         Args:
             structure: ASE Atoms object
             
         Returns:
-            Filtered ASE Atoms object with only magnetic species
+            Filtered ASE Atoms object with non-magnetic species removed
             Dictionary mapping original indices to new indices
         """
-        if self.magnetic_species is None:
+        if self.nonmagnetic_species is None:
+            # All atoms are magnetic
             return structure, {i: i for i in range(len(structure))}
         
-        # Find magnetic atoms
+        # Find magnetic atoms (exclude non-magnetic species)
         magnetic_indices = []
         for i, atom in enumerate(structure):
-            if atom.symbol in self.magnetic_species:
+            if atom.symbol not in self.nonmagnetic_species:
                 magnetic_indices.append(i)
         
         if not magnetic_indices:
-            raise ValueError(f"No magnetic species {self.magnetic_species} found in structure")
+            raise ValueError(f"All atoms are non-magnetic species {self.nonmagnetic_species}")
         
         # Create filtered structure
         magnetic_structure = structure[magnetic_indices]
@@ -490,7 +492,7 @@ class Hamiltonian:
         index_map = {old_idx: new_idx for new_idx, old_idx in enumerate(magnetic_indices)}
         
         print(f"Filtered structure: {len(structure)} → {len(magnetic_structure)} atoms")
-        print(f"Magnetic species: {self.magnetic_species}")
+        print(f"Removed non-magnetic species: {self.nonmagnetic_species}")
         
         return magnetic_structure, index_map
     
